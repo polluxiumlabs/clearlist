@@ -1,0 +1,26 @@
+Name,Title,Organization,Email
+Alex Morgan,Chief Executive Officer,Northstar Labs,alex.morgan@gmail.com
+Sara Khan,Chief Technology Officer,Nova Systems,sara.khan@outlook.com
+David Lee,Marketing Director,Acme Digital,david.lee@yahoo.com
+Maya Patel,Product Manager,Orbit Software,maya.patel@icloud.com
+Omar Rahman,Sales Manager,Blue Peak,omar.rahman@proton.me
+"Chen, Li",Operations Lead,"Summit, Inc.",chen.li@gmail.com
+Nadia Ahmed,Finance Director,Vertex Group,nadia.ahmed@outlook.com
+James Wilson,Founder,Willow Ventures,james.wilson@yahoo.com
+Fatima Noor,Designer,Pixel House,fatima.noor@gmail.com
+Lucas Martin,Engineer,Harbor Tech,lucas.martin@proton.me
+Support Team,Customer Support,Northstar Labs,support@gmail.com
+Sales Desk,Sales,Acme Digital,sales@outlook.com
+Information Desk,Administration,Nova Systems,info@yahoo.com
+Temporary User,Contractor,Example Project,tempuser@mailinator.com
+Campaign Test,QA,Example Project,campaign-test@yopmail.com
+Broken Address,Unknown,Test Company,broken@@example.com
+Missing Domain,Unknown,Test Company,user@
+Missing At Sign,Unknown,Test Company,user.example.com
+Double Dot,Unknown,Test Company,jane..doe@example.com
+Nonexistent Domain,Unknown,Test Company,nobody@this-domain-should-not-exist-987654321.example
+Duplicate Alex,Chief Executive Officer,Northstar Labs,ALEX.MORGAN@GMAIL.COM
+Duplicate Sara,Chief Technology Officer,Nova Systems, sara.khan@outlook.com 
+No Email,Researcher,Quiet Labs,
+Unicode Name,Analyst,Global Research,rafiq.test@gmail.com
+Quoted Company,Account Executive,"Smith, Jones & Partners",account.executive@outlook.com

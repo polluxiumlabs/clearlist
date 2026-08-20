@@ -1,5 +1,5 @@
-import Papa from "papaparse";
-import type { ContactRow, ParsedPayload } from "../lib/types";
+/* global Papa */
+importScripts("/papaparse.min.js");
 
 const aliases = {
   name: ["name", "full name", "fullname", "contact", "contact name"],
@@ -8,16 +8,16 @@ const aliases = {
   email: ["email", "email address", "e-mail", "mail"],
 };
 
-const normalizeHeader = (value: string) => value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+const normalizeHeader = (value) => value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
 
-const findColumn = (headers: string[], candidates: string[]) => {
+const findColumn = (headers, candidates) => {
   const normalized = headers.map(normalizeHeader);
   const index = normalized.findIndex((header) => candidates.includes(header));
   return index >= 0 ? headers[index] : undefined;
 };
 
-self.onmessage = ({ data }: MessageEvent<{ text: string }>) => {
-  Papa.parse<Record<string, string>>(data.text, {
+self.onmessage = ({ data }) => {
+  Papa.parse(data.text, {
     header: true,
     skipEmptyLines: "greedy",
     transformHeader: (header) => header.trim(),
@@ -27,7 +27,7 @@ self.onmessage = ({ data }: MessageEvent<{ text: string }>) => {
         return;
       }
 
-      const headers = meta.fields ?? [];
+      const headers = meta.fields || [];
       const emailColumn = findColumn(headers, aliases.email);
       if (!emailColumn) {
         self.postMessage({ error: "We couldn’t find an email column. Name it Email or Email Address and try again." });
@@ -37,13 +37,13 @@ self.onmessage = ({ data }: MessageEvent<{ text: string }>) => {
       const nameColumn = findColumn(headers, aliases.name);
       const titleColumn = findColumn(headers, aliases.title);
       const organizationColumn = findColumn(headers, aliases.organization);
-      const seen = new Set<string>();
-      const rows: ContactRow[] = [];
+      const seen = new Set();
+      const rows = [];
       let duplicates = 0;
       let emptyEmails = 0;
 
       rawRows.forEach((raw) => {
-        const email = String(raw[emailColumn] ?? "").trim().toLowerCase();
+        const email = String(raw[emailColumn] || "").trim().toLowerCase();
         if (!email) {
           emptyEmails += 1;
           return;
@@ -55,15 +55,16 @@ self.onmessage = ({ data }: MessageEvent<{ text: string }>) => {
         seen.add(email);
         rows.push({
           id: rows.length + 1,
-          name: nameColumn ? String(raw[nameColumn] ?? "").trim() : "",
-          title: titleColumn ? String(raw[titleColumn] ?? "").trim() : "",
-          organization: organizationColumn ? String(raw[organizationColumn] ?? "").trim() : "",
+          name: nameColumn ? String(raw[nameColumn] || "").trim() : "",
+          title: titleColumn ? String(raw[titleColumn] || "").trim() : "",
+          organization: organizationColumn ? String(raw[organizationColumn] || "").trim() : "",
           email,
         });
       });
 
-      const payload: ParsedPayload = { rows, duplicates, emptyEmails, sourceRows: rawRows.length };
-      self.postMessage({ payload });
+      self.postMessage({
+        payload: { rows, duplicates, emptyEmails, sourceRows: rawRows.length },
+      });
     },
   });
 };

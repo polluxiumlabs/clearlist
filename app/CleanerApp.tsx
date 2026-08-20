@@ -58,7 +58,9 @@ export default function CleanerApp() {
     setFileName(file.name);
 
     try {
-      const worker = new Worker(new URL("../workers/csv.worker.ts", import.meta.url), { type: "module" });
+      // Keep the worker at a stable, same-origin public URL. Using import.meta.url
+      // here is rewritten to a file:// base by vinext's server/client build.
+      const worker = new Worker("/csv.worker.js");
       const text = await file.text();
       const result = await new Promise<ParsedPayload>((resolve, reject) => {
         worker.onmessage = ({ data }) => data.error ? reject(new Error(data.error)) : resolve(data.payload);
