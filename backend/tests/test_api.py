@@ -11,6 +11,14 @@ def test_health_reports_no_storage() -> None:
     assert response.json() == {"status": "ok", "storage": False}
 
 
+def test_upload_requires_configured_private_storage() -> None:
+    response = client.post(
+        "/api/uploads",
+        files={"file": ("contacts.csv", b"Email\nuser@example.com\n", "text/csv")},
+    )
+    assert response.status_code == 503
+
+
 def test_invalid_syntax_short_circuits() -> None:
     response = client.post("/api/verify-batch", json={"emails": ["broken@@example.com"]})
     assert response.status_code == 200

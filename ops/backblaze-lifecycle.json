@@ -1,0 +1,9 @@
+{
+  "lifecycleRules": [
+    {
+      "fileNamePrefix": "uploads/",
+      "daysFromUploadingToHiding": 1,
+      "daysFromHidingToDeleting": 1
+    }
+  ]
+}

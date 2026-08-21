@@ -2,6 +2,9 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
+import Link from "next/link";
+import SiteFooter from "../components/SiteFooter";
+import SiteHeader from "../components/SiteHeader";
 import type { ContactRow, ParsedPayload, VerificationResult, VerificationStatus } from "../lib/types";
 
 const BATCH_SIZE = 250;
@@ -9,6 +12,12 @@ const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").rep
 
 const Shield = () => <span className="shield-mark" aria-hidden="true">✓</span>;
 const statusLabel = (status?: VerificationStatus) => status ? status[0].toUpperCase() + status.slice(1) : "Pending";
+
+type StoredUpload = {
+  upload_id: string;
+  deletion_token: string;
+  expires_at: string;
+};
 
 const csvCell = (value: string) => {
   const escaped = value.replace(/"/g, '""');
@@ -29,6 +38,9 @@ export default function CleanerApp() {
   const [filter, setFilter] = useState<"all" | VerificationStatus>("all");
   const [includeRisky, setIncludeRisky] = useState(false);
   const [includeUnknown, setIncludeUnknown] = useState(false);
+  const [storeCopy, setStoreCopy] = useState(false);
+  const [storedUpload, setStoredUpload] = useState<StoredUpload | null>(null);
+  const [storageMessage, setStorageMessage] = useState("");
 
   const stats = useMemo(() => {
     const values = { valid: 0, invalid: 0, risky: 0, unknown: 0, pending: 0 };
@@ -45,6 +57,35 @@ export default function CleanerApp() {
   const progress = rows.length ? Math.round((completed / rows.length) * 100) : 0;
   const exportCount = stats.valid + (includeRisky ? stats.risky : 0) + (includeUnknown ? stats.unknown : 0);
 
+  const deleteStoredCopy = async (silent = false) => {
+    if (!storedUpload) return;
+    try {
+      const response = await fetch(`${API_URL}/api/uploads/${storedUpload.upload_id}`, {
+        method: "DELETE",
+        headers: { "X-Delete-Token": storedUpload.deletion_token },
+      });
+      if (!response.ok && response.status !== 404) throw new Error("Delete failed");
+      setStoredUpload(null);
+      if (!silent) setStorageMessage("The stored CSV copy was deleted.");
+    } catch {
+      if (!silent) setStorageMessage("The stored copy could not be deleted right now. It remains covered by the configured retention policy.");
+    }
+  };
+
+  const storeCsv = async (file: File) => {
+    const body = new FormData();
+    body.append("file", file, file.name);
+    const response = await fetch(`${API_URL}/api/uploads`, { method: "POST", body });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null) as { detail?: string } | null;
+      throw new Error(detail?.detail || "Secure CSV storage is unavailable.");
+    }
+    const upload = await response.json() as StoredUpload;
+    setStoredUpload(upload);
+    const expiry = new Date(upload.expires_at).toLocaleString();
+    setStorageMessage(`Encrypted copy stored privately and scheduled to expire after ${expiry}. You can delete it sooner.`);
+  };
+
   const parseFile = async (file?: File) => {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".csv")) {
@@ -56,6 +97,8 @@ export default function CleanerApp() {
     setRows([]);
     setCompleted(0);
     setFileName(file.name);
+    setStorageMessage("");
+    if (storedUpload) await deleteStoredCopy(true);
 
     try {
       // Keep the worker at a stable, same-origin public URL. Using import.meta.url
@@ -72,6 +115,13 @@ export default function CleanerApp() {
       if (result.rows.length > 50_000) throw new Error("This version supports up to 50,000 unique email addresses per file.");
       setRows(result.rows);
       setParseInfo({ duplicates: result.duplicates, emptyEmails: result.emptyEmails, sourceRows: result.sourceRows });
+      if (storeCopy) {
+        try {
+          await storeCsv(file);
+        } catch (storageError) {
+          setStorageMessage(storageError instanceof Error ? `${storageError.message} The list was still parsed locally.` : "Secure storage is unavailable. The list was still parsed locally.");
+        }
+      }
     } catch (caught) {
       setFileName("");
       setError(caught instanceof Error ? caught.message : "The CSV could not be read.");
@@ -123,13 +173,15 @@ export default function CleanerApp() {
   };
 
   const cancel = () => abortRef.current?.abort();
-  const reset = () => {
+  const reset = async () => {
     abortRef.current?.abort();
+    await deleteStoredCopy(true);
     setRows([]);
     setFileName("");
     setParseInfo(null);
     setCompleted(0);
     setError("");
+    setStorageMessage("");
     setFilter("all");
   };
 
@@ -149,15 +201,12 @@ export default function CleanerApp() {
 
   return (
     <main>
-      <nav className="nav-shell" aria-label="Primary navigation">
-        <a className="brand" href="#top" aria-label="Clearlist home"><span className="brand-mark"><span /></span><span>clearlist</span></a>
-        <div className="nav-actions"><a href="#how-it-works">How it works</a><a href="#status-guide">Status guide</a><span className="privacy-pill"><Shield /> Privacy first</span></div>
-      </nav>
+      <SiteHeader />
 
       <section className={`hero ${rows.length ? "hero-compact" : ""}`} id="top">
-        <span className="hero-label">Private email verification</span>
+        <span className="hero-label">Email verification + list quality</span>
         <h1>A cleaner list.<br /><em>A clearer send.</em></h1>
-        <p className="hero-copy">Verify every address, remove the dead weight, and download a campaign-ready CSV — without your contact list ever being stored.</p>
+        <p className="hero-copy">Understand every address, remove decisive failures, and download a campaign-ready CSV with clear controls for optional short-term storage.</p>
 
         {!rows.length ? (
           <div className="workspace-card">
@@ -165,9 +214,10 @@ export default function CleanerApp() {
               <div className="upload-icon" aria-hidden="true"><span>{parsing ? "…" : "↑"}</span></div>
               <h2>{parsing ? "Reading your list" : "Drop your contact list here"}</h2>
               <p>{parsing ? "Normalizing and removing duplicates…" : "or choose a CSV from your computer"}</p>
+              <label className="storage-choice" htmlFor="store-copy" aria-label="Keep an encrypted CSV copy with a 24-hour retention target"><input id="store-copy" type="checkbox" checked={storeCopy} onChange={(event) => setStoreCopy(event.target.checked)} disabled={parsing} /><span><strong>Keep an encrypted short-term copy</strong><small>Optional · 24-hour retention target · Delete anytime</small></span></label>
               <button className="choose-button" type="button" onClick={() => inputRef.current?.click()} disabled={parsing}>Choose CSV file</button>
               <input ref={inputRef} className="sr-only" type="file" accept=".csv,text/csv" onChange={onFileChange} aria-label="Choose CSV file" />
-              <small>CSV up to 50,000 rows · Your file stays in this browser</small>
+              <small>CSV up to 50,000 rows · Parsing and deduplication happen in your browser</small>
             </div>
             <aside className="result-preview" aria-label="Verification preview">
               <div className="preview-top"><span>What you’ll get</span><span className="live-label"><i /> Live results</span></div>
@@ -180,7 +230,7 @@ export default function CleanerApp() {
           <section className="dashboard" aria-live="polite">
             <header className="dashboard-head">
               <div className="file-heading"><span className="file-icon" aria-hidden="true"><span className="file-sheet"><i /><i /><i /></span></span><div><strong>{fileName}</strong><span>{rows.length.toLocaleString()} unique addresses{parseInfo?.duplicates ? ` · ${parseInfo.duplicates.toLocaleString()} duplicates removed` : ""}</span></div></div>
-              <div className="head-actions"><button className="text-button" type="button" onClick={reset}>Replace file</button>{!hasResults && <button className="primary-button" type="button" onClick={verify} disabled={verifying}>{verifying ? "Verifying…" : "Verify addresses"}</button>}</div>
+              <div className="head-actions">{storedUpload && <button className="delete-button" type="button" onClick={() => deleteStoredCopy()}>Delete stored copy</button>}<button className="text-button" type="button" onClick={reset}>Replace file</button>{!hasResults && <button className="primary-button" type="button" onClick={verify} disabled={verifying}>{verifying ? "Verifying…" : "Verify addresses"}</button>}</div>
             </header>
 
             <div className="stat-grid">
@@ -205,13 +255,14 @@ export default function CleanerApp() {
         )}
 
         {error && <div className="error-banner" role="alert"><span>!</span>{error}</div>}
-        {!rows.length && <div className="trust-row"><span><Shield /> Processed in memory</span><span><Shield /> Nothing saved to a database</span><span><Shield /> Export happens in your browser</span></div>}
+        {storageMessage && <div className="storage-banner" role="status"><Shield />{storageMessage}</div>}
+        {!rows.length && <div className="trust-row"><span><Shield /> Browser-based parsing</span><span><Shield /> Optional encrypted storage</span><span><Shield /> Clear deletion control</span></div>}
       </section>
 
       <section className="how-section" id="how-it-works">
         <span className="section-kicker">Private by design</span>
-        <h2>Your contacts are yours.<br />We keep it that way.</h2>
-        <div className="steps-grid"><article><span>01</span><h3>Open locally</h3><p>Your CSV is parsed and deduplicated in a background worker inside your browser.</p></article><article><span>02</span><h3>Verify briefly</h3><p>Only small email batches enter temporary server memory for DNS and mailbox checks.</p></article><article><span>03</span><h3>Leave no trace</h3><p>Your clean four-column CSV is created here. Close the tab and the session disappears.</p></article></div>
+        <h2>Know what happens<br />at every step.</h2>
+        <div className="steps-grid"><article><span>01</span><h3>Parse locally</h3><p>Your CSV is read and deduplicated in a background worker inside your browser.</p></article><article><span>02</span><h3>Store by choice</h3><p>Encrypted short-term storage is optional, private, and paired with an immediate delete control.</p></article><article><span>03</span><h3>Verify briefly</h3><p>Small email batches enter temporary server memory for DNS and available mailbox checks.</p></article><article><span>04</span><h3>Export clearly</h3><p>Your clean four-column CSV is created in the browser with your chosen result categories.</p></article></div>
       </section>
 
       <section className="status-section" id="status-guide">
@@ -224,8 +275,17 @@ export default function CleanerApp() {
         </div>
       </section>
 
+      <section className="resources-section">
+        <div className="resources-heading"><span className="section-kicker">Learn before you send</span><h2>Better lists need better decisions.</h2><p>Use original, practical guides to interpret verification results and protect sender quality.</p></div>
+        <div className="resource-grid">
+          <Link href="/email-verification-guide"><span>Verification</span><h3>How verification actually works</h3><p>Understand syntax, DNS, MX, SMTP, catch-all, and unknown results.</p><b>Read guide →</b></Link>
+          <Link href="/deliverability-guide"><span>Deliverability</span><h3>A valid address is only the beginning</h3><p>Connect list quality with authentication, relevance, volume, and complaints.</p><b>Read guide →</b></Link>
+          <Link href="/guides"><span>Learning center</span><h3>Explore every Clearlist guide</h3><p>Learn about bounces, authentication, shared inboxes, and catch-all domains.</p><b>View all guides →</b></Link>
+        </div>
+      </section>
+
       <section className="final-cta" aria-label="Start cleaning a list"><div><span>Ready when you are</span><h2>Turn a messy list into a cleaner send.</h2></div><a href="#top">Clean a CSV <span aria-hidden="true">↑</span></a></section>
-      <footer className="site-footer"><a className="brand" href="#top"><span className="brand-mark"><span /></span><span>clearlist</span></a><div className="footer-links"><a href="#how-it-works">How it works</a><a href="#status-guide">Status guide</a></div><p>Private email verification, without the database.</p></footer>
+      <SiteFooter />
     </main>
   );
 }

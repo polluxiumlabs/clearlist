@@ -1,0 +1,19 @@
+import type { Metadata } from "next";
+import ContentPage from "../../components/ContentPage";
+
+export const metadata: Metadata = { title: "Privacy Policy — Clearlist", description: "How Clearlist processes email lists, optional CSV storage, verification requests, analytics, and advertising data.", alternates: { canonical: "/privacy" } };
+
+export default function PrivacyPage() {
+  return (
+    <ContentPage kicker="Legal" title="Privacy policy" intro="This policy explains what Clearlist processes, why it is needed, where it goes, and the choices available to you. Last updated August 21, 2026.">
+      <section><h2>Information you provide</h2><p>When you choose a CSV, Clearlist reads the file in your browser to identify the email column, normalize addresses, remove duplicates, and prepare an export. The list may also contain names, job titles, and organizations. Do not upload sensitive categories of personal data or any list you are not authorized to process.</p></section>
+      <section><h2>Email verification</h2><p>When you select Verify, email addresses are sent in limited batches to the Clearlist API. The service performs syntax, DNS, MX, risk-pattern, and—when enabled—mailbox checks. DNS operators and recipient mail providers may observe the domain or recipient queried as part of normal network operation. Short-lived domain results may be cached in server memory for performance.</p></section>
+      <section><h2>Optional CSV storage</h2><p>Cloud storage is optional and disabled until you select it. If selected, the original CSV is transmitted to the Clearlist API and stored in a private Backblaze B2 bucket using a random object identifier and server-side encryption. Personal data is not placed in the object name or storage metadata. The retention target is 24 hours: the bucket lifecycle hides objects after one day and permanently removes hidden versions on its following deletion cycle. The workspace also provides an immediate deletion control.</p></section>
+      <section><h2>Service providers</h2><p>Clearlist may use Vercel to deliver the website, Render to operate the verification API, Backblaze B2 for optional encrypted file storage, DNS and mail providers to perform verification, and Google AdSense to display advertising after approval. Each provider processes limited technical data necessary to deliver its service.</p></section>
+      <section><h2>Advertising, cookies, and consent</h2><p>If Google AdSense is enabled, Google and its partners may use cookies, web beacons, IP addresses, device information, or other identifiers to deliver, measure, and protect advertising. Where required, a Google-certified consent management platform will request choices before personalized advertising or related storage is used. You can revisit available privacy choices through the consent message.</p></section>
+      <section><h2>Security and retention</h2><p>Transport uses HTTPS in production. Storage credentials remain on the API server and are never included in browser code. Optional CSV objects use opaque names and private access. No method of transmission or storage is risk-free, so Clearlist limits stored data and retention rather than promising absolute security.</p></section>
+      <section><h2>Your choices</h2><ul><li>Use browser-only CSV processing and leave optional storage unchecked.</li><li>Delete a stored copy from the workspace using its one-time deletion capability.</li><li>Do not begin verification if you do not want addresses sent to the API and relevant network providers.</li><li>Contact the publisher to request access, correction, or deletion where applicable.</li></ul></section>
+      <section><h2>Policy changes</h2><p>Material changes will be reflected on this page with a revised date. Continued use after a change means the updated policy applies to new processing.</p></section>
+    </ContentPage>
+  );
+}

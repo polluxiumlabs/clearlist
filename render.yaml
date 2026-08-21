@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: clearlist-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SMTP_ENABLED
+        value: "false"
+      - key: CATCH_ALL_ENABLED
+        value: "false"
+      - key: CSV_RETENTION_HOURS
+        value: "24"
+      - key: B2_ENDPOINT
+        sync: false
+      - key: B2_REGION
+        sync: false
+      - key: B2_BUCKET
+        sync: false
+      - key: B2_KEY_ID
+        sync: false
+      - key: B2_APPLICATION_KEY
+        sync: false
+      - key: UPLOAD_TOKEN_SECRET
+        generateValue: true

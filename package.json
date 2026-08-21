@@ -9,11 +9,15 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "dev:vercel": "next dev",
+    "build:vercel": "next build",
+    "start:vercel": "next start",
+    "test": "node --test tests/rendered-html.test.mjs",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern public"
   },
   "dependencies": {
     "@types/papaparse": "^5.5.2",
+    "next": "^16.3.1",
     "papaparse": "^5.6.0",
     "react": "19.2.6",
     "react-dom": "19.2.6"
@@ -21,7 +25,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
     "@eslint/js": "9.39.4",
-    "@next/eslint-plugin-next": "16.2.6",
+    "@next/eslint-plugin-next": "^16.3.1",
     "@openai/sites-vite-plugin": "0.1.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",

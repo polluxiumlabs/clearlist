@@ -1,35 +1,21 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { headers } from "next/headers";
+import GoogleAdSense from "../components/GoogleAdSense";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const base = new URL(process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://clearlist-private-email-verifier.rafiq90.chatgpt.site");
+const title = "Clearlist — Private email verification";
+const description = "Understand email-list quality with transparent syntax, domain, MX, mailbox, disposable, role, and catch-all signals.";
+const image = new URL("/og.png", base).href;
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export async function generateMetadata(): Promise<Metadata> {
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "localhost:3000";
-  const protocol = requestHeaders.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
-  const base = new URL(`${protocol}://${host}`);
-  const title = "Clearlist — Private email verification";
-  const description = "Clean and verify email lists without storing your contacts.";
-  const image = new URL("/og.png", base).href;
-  return {
-    metadataBase: base,
-    title,
-    description,
-    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
-    openGraph: { title, description, type: "website", url: base, images: [{ url: image, width: 1792, height: 928, alt: "Clearlist — A cleaner list. A clearer send." }] },
-    twitter: { card: "summary_large_image", title, description, images: [image] },
-  };
-}
+export const metadata: Metadata = {
+  metadataBase: base,
+  title,
+  description,
+  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+  alternates: { canonical: base },
+  openGraph: { title, description, type: "website", siteName: "Clearlist", url: base, images: [{ url: image, width: 1792, height: 928, alt: "Clearlist — A cleaner list. A clearer send." }] },
+  twitter: { card: "summary_large_image", title, description, images: [image] },
+};
 
 export default function RootLayout({
   children,
@@ -38,7 +24,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+      <head><GoogleAdSense /></head>
+      <body>
         {children}
       </body>
     </html>

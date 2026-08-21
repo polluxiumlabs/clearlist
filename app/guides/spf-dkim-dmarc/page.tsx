@@ -1,0 +1,16 @@
+import type { Metadata } from "next";
+import ContentPage from "../../../components/ContentPage";
+
+export const metadata: Metadata = { title: "SPF, DKIM, and DMARC Explained — Clearlist", description: "A practical explanation of email authentication, alignment, reporting, and safe rollout steps.", alternates: { canonical: "/guides/spf-dkim-dmarc" } };
+
+export default function AuthenticationGuide() {
+  return (
+    <ContentPage kicker="Authentication guide" title="SPF, DKIM, and DMARC work as a system" intro="Authentication helps receiving providers verify your sending identity. Correct records support trust, but they do not create reputation by themselves.">
+      <section><h2>SPF identifies authorized senders</h2><p>Sender Policy Framework publishes which systems may send mail for a domain. The receiving server checks the envelope sender domain, not simply the address displayed in the From header. Keep one SPF record, include only active services, and stay within the DNS lookup limit. Removing an old platform matters as much as adding a new one.</p><p>Forwarding can break a direct SPF path because the forwarding server is not authorized by the original domain. That is one reason DMARC can also rely on an aligned DKIM signature.</p></section>
+      <section><h2>DKIM signs the message</h2><p>DomainKeys Identified Mail adds a cryptographic signature. The receiver retrieves a public key from DNS and checks whether signed headers and body content still match. Use a modern key length, rotate selectors deliberately, and confirm the signing domain aligns with the visible From domain.</p><p>A DKIM “pass” proves that the signed content survived and that the signer controlled the key. It does not prove the message was wanted or harmless.</p></section>
+      <section><h2>DMARC connects authentication to the visible From address</h2><p>DMARC passes when SPF or DKIM passes and the authenticated domain aligns with the domain users see. It also publishes a policy for messages that fail and provides aggregate reports that help find forgotten senders or abuse.</p><p>Begin with reporting and no enforcement while you inventory legitimate mail streams. Correct alignment failures, then move gradually toward quarantine or reject. Publishing a strict policy before discovering every billing system, CRM, help desk, and marketing sender can block valid business mail.</p></section>
+      <section><h2>Safe rollout checklist</h2><ol><li>List every platform and server that sends as your domain.</li><li>Confirm SPF authorization for the envelope domains each platform uses.</li><li>Enable DKIM with a domain you control and verify alignment.</li><li>Publish DMARC reporting with a monitored reporting destination.</li><li>Review reports over multiple normal sending cycles.</li><li>Fix or remove unknown sources before raising enforcement.</li><li>Monitor after every provider or DNS change.</li></ol></section>
+      <section><h2>Authentication and cold outreach</h2><p>Strong authentication is a minimum technical control, not permission to send at unlimited volume. Providers still evaluate complaints, targeting, engagement, content, sending patterns, and list quality. A fully authenticated campaign can be filtered when recipients consistently reject it.</p></section>
+    </ContentPage>
+  );
+}
