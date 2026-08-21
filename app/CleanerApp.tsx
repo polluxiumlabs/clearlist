@@ -151,11 +151,11 @@ export default function CleanerApp() {
     <main>
       <nav className="nav-shell" aria-label="Primary navigation">
         <a className="brand" href="#top" aria-label="Clearlist home"><span className="brand-mark"><span /></span><span>clearlist</span></a>
-        <div className="nav-actions"><a href="#how-it-works">How it works</a><span className="privacy-pill"><Shield /> Privacy first</span></div>
+        <div className="nav-actions"><a href="#how-it-works">How it works</a><a href="#status-guide">Status guide</a><span className="privacy-pill"><Shield /> Privacy first</span></div>
       </nav>
 
       <section className={`hero ${rows.length ? "hero-compact" : ""}`} id="top">
-        <div className="eyebrow"><span /> No sign-up. No storage. No surprises.</div>
+        <span className="hero-label">Private email verification</span>
         <h1>A cleaner list.<br /><em>A clearer send.</em></h1>
         <p className="hero-copy">Verify every address, remove the dead weight, and download a campaign-ready CSV — without your contact list ever being stored.</p>
 
@@ -179,7 +179,7 @@ export default function CleanerApp() {
         ) : (
           <section className="dashboard" aria-live="polite">
             <header className="dashboard-head">
-              <div className="file-heading"><span className="file-icon">CSV</span><div><strong>{fileName}</strong><span>{rows.length.toLocaleString()} unique addresses{parseInfo?.duplicates ? ` · ${parseInfo.duplicates.toLocaleString()} duplicates removed` : ""}</span></div></div>
+              <div className="file-heading"><span className="file-icon" aria-hidden="true"><span className="file-sheet"><i /><i /><i /></span></span><div><strong>{fileName}</strong><span>{rows.length.toLocaleString()} unique addresses{parseInfo?.duplicates ? ` · ${parseInfo.duplicates.toLocaleString()} duplicates removed` : ""}</span></div></div>
               <div className="head-actions"><button className="text-button" type="button" onClick={reset}>Replace file</button>{!hasResults && <button className="primary-button" type="button" onClick={verify} disabled={verifying}>{verifying ? "Verifying…" : "Verify addresses"}</button>}</div>
             </header>
 
@@ -213,7 +213,19 @@ export default function CleanerApp() {
         <h2>Your contacts are yours.<br />We keep it that way.</h2>
         <div className="steps-grid"><article><span>01</span><h3>Open locally</h3><p>Your CSV is parsed and deduplicated in a background worker inside your browser.</p></article><article><span>02</span><h3>Verify briefly</h3><p>Only small email batches enter temporary server memory for DNS and mailbox checks.</p></article><article><span>03</span><h3>Leave no trace</h3><p>Your clean four-column CSV is created here. Close the tab and the session disappears.</p></article></div>
       </section>
-      <footer className="site-footer"><a className="brand" href="#top"><span className="brand-mark"><span /></span><span>clearlist</span></a><p>Private email verification, without the database.</p></footer>
+
+      <section className="status-section" id="status-guide">
+        <div className="status-intro"><span className="section-kicker">Honest results</span><h2>Clear signals.<br />No false certainty.</h2><p>Every address lands in a practical group, with the reason shown beside it. Unknown never means automatically valid.</p></div>
+        <div className="status-guide-grid">
+          <article className="guide-valid"><span className="guide-dot" /><div><h3>Valid</h3><p>The mailbox accepted the verification request. A strong candidate for your clean export.</p></div></article>
+          <article className="guide-invalid"><span className="guide-dot" /><div><h3>Invalid</h3><p>The syntax, domain, or mailbox failed a decisive check. Remove it from the send.</p></div></article>
+          <article className="guide-risky"><span className="guide-dot" /><div><h3>Risky</h3><p>It may receive mail, but role-based or disposable patterns can lower list quality.</p></div></article>
+          <article className="guide-unknown"><span className="guide-dot" /><div><h3>Unknown</h3><p>The provider blocked the check or timed out. This does not confirm the mailbox exists.</p></div></article>
+        </div>
+      </section>
+
+      <section className="final-cta" aria-label="Start cleaning a list"><div><span>Ready when you are</span><h2>Turn a messy list into a cleaner send.</h2></div><a href="#top">Clean a CSV <span aria-hidden="true">↑</span></a></section>
+      <footer className="site-footer"><a className="brand" href="#top"><span className="brand-mark"><span /></span><span>clearlist</span></a><div className="footer-links"><a href="#how-it-works">How it works</a><a href="#status-guide">Status guide</a></div><p>Private email verification, without the database.</p></footer>
     </main>
   );
 }
