@@ -35,20 +35,28 @@ test("does not make the removed marketing claim", async () => {
   assert.match(source, /Delete stored copy/);
 });
 
-test("keeps AdSense and contact identity configuration explicit", async () => {
-  const [adsense, contact, contactForm, privacy, env] = await Promise.all([
+test("keeps Google services and contact identity configuration explicit", async () => {
+  const [adsense, analytics, contact, contactForm, privacy, env] = await Promise.all([
     readFile(new URL("components/GoogleAdSense.tsx", root), "utf8"),
+    readFile(new URL("components/GoogleAnalytics.tsx", root), "utf8"),
     readFile(new URL("app/contact/page.tsx", root), "utf8"),
     readFile(new URL("app/contact/ContactForm.tsx", root), "utf8"),
     readFile(new URL("app/privacy/page.tsx", root), "utf8"),
     readFile(new URL(".env.example", root), "utf8"),
   ]);
   assert.match(adsense, /NEXT_PUBLIC_ADSENSE_CLIENT/);
+  assert.match(analytics, /NEXT_PUBLIC_GA_MEASUREMENT_ID/);
   assert.match(contact, /NEXT_PUBLIC_CONTACT_EMAIL/);
   assert.match(contactForm, /\/api\/contact/);
   assert.match(contactForm, /privacy_accepted/);
   assert.match(privacy, /Firebase Firestore/);
   assert.doesNotMatch(env, /ca-pub-\d{6,}/);
+  assert.doesNotMatch(env, /G-[A-Z0-9]{6,}/);
+});
+
+test("keeps the admin dashboard text-only", async () => {
+  const admin = await readFile(new URL("app/admin/page.tsx", root), "utf8");
+  assert.doesNotMatch(admin, /[🔄📁✉️📥✨🗑️✕]/u);
 });
 
 test("publishes consistent crawl and structured-data signals", async () => {

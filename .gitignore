@@ -32,6 +32,9 @@ yarn-error.log*
 .env*
 !.env.example
 !backend/.env.example
+*.json.secret
+*private-key*.json
+*serviceAccount*.json
 
 # vercel
 .vercel

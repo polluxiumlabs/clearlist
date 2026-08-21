@@ -37,6 +37,10 @@ class B2Storage:
     def object_key(upload_id: str) -> str:
         return f"uploads/{upload_id}.csv"
 
+    @staticmethod
+    def clean_object_key(upload_id: str) -> str:
+        return f"uploads/{upload_id}-clean.csv"
+
     def deletion_token(self, upload_id: str) -> str:
         digest = hmac.new(settings.upload_token_secret.encode(), upload_id.encode(), hashlib.sha256).digest()
         return base64.urlsafe_b64encode(digest).decode().rstrip("=")
@@ -54,8 +58,37 @@ class B2Storage:
             ServerSideEncryption="AES256",
         )
 
+    def get_csv(self, upload_id: str) -> bytes:
+        response = self._get_client().get_object(Bucket=settings.b2_bucket, Key=self.object_key(upload_id))
+        return response["Body"].read()
+
+    def put_clean_csv(self, upload_id: str, body: bytes) -> None:
+        self._get_client().put_object(
+            Bucket=settings.b2_bucket,
+            Key=self.clean_object_key(upload_id),
+            Body=body,
+            ContentType="text/csv; charset=utf-8",
+            CacheControl="no-store",
+            ServerSideEncryption="AES256",
+        )
+
+    def get_clean_csv(self, upload_id: str) -> bytes | None:
+        try:
+            response = self._get_client().get_object(Bucket=settings.b2_bucket, Key=self.clean_object_key(upload_id))
+            return response["Body"].read()
+        except Exception:
+            return None
+
     def delete_csv(self, upload_id: str) -> None:
         self._get_client().delete_object(Bucket=settings.b2_bucket, Key=self.object_key(upload_id))
+
+    def delete_all_csv_versions(self, upload_id: str) -> None:
+        client = self._get_client()
+        client.delete_object(Bucket=settings.b2_bucket, Key=self.object_key(upload_id))
+        try:
+            client.delete_object(Bucket=settings.b2_bucket, Key=self.clean_object_key(upload_id))
+        except Exception:
+            pass
 
 
 b2_storage = B2Storage()

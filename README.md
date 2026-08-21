@@ -2,7 +2,7 @@
 
 Clearlist combines a browser-based CSV cleaner with a FastAPI email-verification service. It reports syntax, domain, MX, disposable, role, SMTP, and catch-all signals without claiming that any verifier can guarantee delivery or inbox placement.
 
-The site includes original email-verification and deliverability guides, About, Contact, Privacy, and Terms pages. Google AdSense code is added only when a valid `NEXT_PUBLIC_ADSENSE_CLIENT` value is configured.
+The site includes original email-verification and deliverability guides, About, Contact, Privacy, and Terms pages. Google AdSense and Google Analytics remain disabled until valid production identifiers are configured.
 
 ## Architecture
 
@@ -73,6 +73,9 @@ Configure these project variables for Production and Preview as appropriate:
 - `NEXT_PUBLIC_SITE_URL=https://YOUR-DOMAIN.example`
 - `NEXT_PUBLIC_CONTACT_EMAIL=YOUR-PUBLIC-SUPPORT-ADDRESS`
 - `NEXT_PUBLIC_ADSENSE_CLIENT=ca-pub-YOUR-PUBLISHER-ID` (only after the publisher ID is available)
+- `NEXT_PUBLIC_GA_MEASUREMENT_ID=G-YOUR-MEASUREMENT-ID` (only after the GA4 web stream exists)
+
+Both Google integrations are configuration-driven. Blank or invalid identifiers produce no Google script tags. The AdSense publisher ID also generates the root `ads.txt` response dynamically.
 
 Deploy with the Vercel dashboard or `vercel --prod`. Next.js is selected explicitly in `vercel.json`.
 

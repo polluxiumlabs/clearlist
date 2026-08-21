@@ -39,6 +39,7 @@ class Settings:
     firebase_private_key: str = os.getenv("FIREBASE_PRIVATE_KEY", "").strip().replace("\\n", "\n")
     firebase_database_id: str = os.getenv("FIREBASE_DATABASE_ID", "(default)").strip() or "(default)"
     contact_rate_limit_per_hour: int = int(os.getenv("CONTACT_RATE_LIMIT_PER_HOUR", "5"))
+    admin_secret_key: str = os.getenv("ADMIN_SECRET_KEY", "").strip()
     cors_origins: tuple[str, ...] = tuple(
         origin.strip()
         for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
@@ -52,6 +53,10 @@ class Settings:
     @property
     def database_enabled(self) -> bool:
         return all((self.firebase_project_id, self.firebase_client_email, self.firebase_private_key))
+
+    @property
+    def admin_enabled(self) -> bool:
+        return len(self.admin_secret_key) >= 32 and self.admin_secret_key != "your-admin-secret-token"
 
 
 settings = Settings()

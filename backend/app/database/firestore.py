@@ -94,6 +94,26 @@ class UploadMetadataStore:
             merge=True,
         )
 
+    def mark_cleaned(self, upload_id: str, clean_size_bytes: int) -> None:
+        self._get_client().collection("csv_uploads").document(upload_id).set(
+            {"cleanStatus": "cleaned", "cleanSizeBytes": clean_size_bytes, "cleanedAt": datetime.utcnow()},
+            merge=True,
+        )
+
+    def delete_record(self, upload_id: str) -> None:
+        self._get_client().collection("csv_uploads").document(upload_id).delete()
+
+    def list_all_uploads(self) -> list[dict[str, Any]]:
+        docs = self._get_client().collection("csv_uploads").stream()
+        results: list[dict[str, Any]] = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            data["id"] = doc.id
+            results.append(data)
+        # Sort descending by createdAt
+        results.sort(key=lambda x: str(x.get("createdAt", "")), reverse=True)
+        return results
+
 
 class ContactMessageStore:
     """Store contact requests for the site owner without client-side access."""
@@ -124,6 +144,16 @@ class ContactMessageStore:
                 "submittedAt": submitted_at,
             }
         )
+
+    def list_all_messages(self) -> list[dict[str, Any]]:
+        docs = upload_metadata._get_client().collection("contact_messages").stream()
+        results: list[dict[str, Any]] = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            data["id"] = doc.id
+            results.append(data)
+        results.sort(key=lambda x: str(x.get("submittedAt", "")), reverse=True)
+        return results
 
 
 upload_metadata = UploadMetadataStore()

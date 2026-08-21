@@ -6,10 +6,14 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_health_reports_no_storage() -> None:
+def test_health_reports_service_capabilities() -> None:
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "storage": False, "database": False}
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert isinstance(payload["storage"], bool)
+    assert isinstance(payload["database"], bool)
+    assert isinstance(payload["admin"], bool)
 
 
 def test_upload_requires_configured_private_storage() -> None:

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import GoogleAdSense from "../components/GoogleAdSense";
+import GoogleAnalytics from "../components/GoogleAnalytics";
 import "./globals.css";
 
 const base = new URL(process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://clearlist-private-email-verifier.rafiq90.chatgpt.site");
@@ -64,6 +65,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <GoogleAnalytics />
         <GoogleAdSense />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }} />
       </head>
