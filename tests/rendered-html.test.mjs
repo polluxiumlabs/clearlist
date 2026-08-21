@@ -36,12 +36,30 @@ test("does not make the removed marketing claim", async () => {
 });
 
 test("keeps AdSense and contact identity configuration explicit", async () => {
-  const [adsense, contact, env] = await Promise.all([
+  const [adsense, contact, contactForm, privacy, env] = await Promise.all([
     readFile(new URL("components/GoogleAdSense.tsx", root), "utf8"),
     readFile(new URL("app/contact/page.tsx", root), "utf8"),
+    readFile(new URL("app/contact/ContactForm.tsx", root), "utf8"),
+    readFile(new URL("app/privacy/page.tsx", root), "utf8"),
     readFile(new URL(".env.example", root), "utf8"),
   ]);
   assert.match(adsense, /NEXT_PUBLIC_ADSENSE_CLIENT/);
   assert.match(contact, /NEXT_PUBLIC_CONTACT_EMAIL/);
+  assert.match(contactForm, /\/api\/contact/);
+  assert.match(contactForm, /privacy_accepted/);
+  assert.match(privacy, /Firebase Firestore/);
   assert.doesNotMatch(env, /ca-pub-\d{6,}/);
+});
+
+test("publishes consistent crawl and structured-data signals", async () => {
+  const [layout, robots, sitemap] = await Promise.all([
+    readFile(new URL("app/layout.tsx", root), "utf8"),
+    readFile(new URL("app/robots.ts", root), "utf8"),
+    readFile(new URL("app/sitemap.ts", root), "utf8"),
+  ]);
+  assert.match(layout, /application\/ld\+json/);
+  assert.match(layout, /WebApplication/);
+  assert.match(robots, /sitemap\.xml/);
+  assert.doesNotMatch(robots, /clearlist\.example/);
+  assert.doesNotMatch(sitemap, /clearlist\.example/);
 });

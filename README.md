@@ -9,8 +9,9 @@ The site includes original email-verification and deliverability guides, About, 
 - **Vercel / Next.js:** public website, content pages, local CSV parsing, deduplication, filtering, and export.
 - **Render / FastAPI:** batch verification and optional CSV upload/deletion endpoints.
 - **Backblaze B2:** private, encrypted, short-retention CSV objects. The bucket and object names must never contain email addresses, contact names, or other personal data.
+- **Firebase / Firestore:** server-only upload metadata plus contact-form messages. CSV rows and original CSV filenames are never written to Firestore.
 
-The original CSV is uploaded only when the user selects the optional storage checkbox. Storage credentials remain on Render and are never exposed to the frontend.
+The original CSV is uploaded only when the user selects the optional storage checkbox. B2 and Firebase credentials remain on Render and are never exposed to the frontend. If the Firestore record cannot be created, the API rolls back the B2 upload.
 
 ## Local development
 
@@ -44,6 +45,19 @@ Create a **private** bucket with default SSE-B2 encryption and a bucket-scoped a
 - `UPLOAD_TOKEN_SECRET`
 
 Set a bucket lifecycle rule for the `uploads/` prefix so files are hidden after one day and permanently deleted after the shortest acceptable hidden-file period. The API returns a deletion token so a user can remove an object immediately without an account. Do not expose list or download permissions to the browser.
+
+## Firebase / Firestore
+
+Create a Firebase project and a Firestore Standard database in Native mode. The checked-in `firestore.rules` deny every direct browser read and write because only the Render backend uses the Admin SDK.
+
+Create a dedicated Firebase service account with the minimum Firestore access needed by the API, then configure these values on Render:
+
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_CLIENT_EMAIL`
+- `FIREBASE_PRIVATE_KEY`
+- `FIREBASE_DATABASE_ID=(default)`
+
+Never add the service-account JSON or private key to Git. The API writes optional-upload metadata to `csv_uploads/{uploadId}` and contact form submissions to `contact_messages/{messageId}`. Contact messages include only the submitted name, reply email, topic, message, status, and timestamps. Browser access remains blocked by Firestore rules; the Render backend uses the Admin SDK.
 
 ## Render
 

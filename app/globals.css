@@ -184,6 +184,7 @@ tbody tr:hover { background:#fbfefc; }
 .article-shell ul,.article-shell ol { margin:18px 0 0; padding-left:22px; }
 .article-shell li+li { margin-top:9px; }
 .article-shell strong { color:#2e425e; }
+.article-shell p a { color:var(--mint-dark); font-weight:650; text-decoration:underline; text-underline-offset:3px; }
 .article-shell code { padding:2px 5px; border-radius:5px; background:#f0f4f2; font:12px var(--font-geist-mono),monospace; }
 .article-cards { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .article-cards article { padding:22px; border:1px solid var(--line); border-radius:15px; background:#f9fcfa; }
@@ -199,6 +200,24 @@ tbody tr:hover { background:#fbfefc; }
 .guide-directory b { margin-top:auto; color:var(--mint-dark); font-size:11px; }
 .contact-card { padding:28px; border:1px solid #d7ebe0!important; border-radius:17px; background:#f4fbf7; }
 .contact-link { color:var(--mint-dark); font-size:20px; font-weight:750; }
+.contact-form { margin-top:28px; display:grid; gap:20px; }
+.contact-field-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.contact-form label>span:first-child { display:block; margin-bottom:8px; color:#2e425e; font-size:13px; font-weight:720; }
+.contact-form input,.contact-form select,.contact-form textarea { width:100%; border:1px solid #cfded6; border-radius:11px; background:#fff; color:var(--ink); outline:none; transition:border-color .2s,box-shadow .2s; }
+.contact-form input,.contact-form select { min-height:46px; padding:0 13px; }
+.contact-form textarea { padding:13px; resize:vertical; line-height:1.6; }
+.contact-form input:focus,.contact-form select:focus,.contact-form textarea:focus { border-color:var(--mint-dark); box-shadow:0 0 0 3px rgba(36,194,138,.13); }
+.contact-form small { display:block; margin-top:6px; color:#7a8797; font-size:11px; line-height:1.5; }
+.contact-honeypot { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
+.contact-form .contact-consent { display:flex; align-items:flex-start; gap:10px; }
+.contact-form .contact-consent input { flex:0 0 auto; width:17px; min-height:17px; margin-top:3px; accent-color:var(--mint-dark); }
+.contact-form .contact-consent span { margin:0; color:#596678; font-size:12px; font-weight:400; line-height:1.6; }
+.contact-consent a { color:var(--mint-dark); font-weight:700; text-decoration:underline; text-underline-offset:2px; }
+.contact-submit { width:max-content; min-height:47px; padding:0 22px; border:0; border-radius:11px; background:var(--ink); color:#fff; font-size:13px; font-weight:750; cursor:pointer; }
+.contact-submit:disabled { opacity:.6; cursor:wait; }
+.contact-feedback { margin:0!important; padding:12px 14px; border-radius:10px; font-size:12px!important; }
+.contact-feedback.sent { border:1px solid #c9e8d9; background:#eaf8f1; color:#176549; }
+.contact-feedback.error { border:1px solid #f0cecb; background:#fff0ef; color:#9d302b; }
 @media (max-width:1000px) {
   .nav-actions a:nth-of-type(n+3) { display:none; }
   .site-footer { grid-template-columns:1fr 1.5fr; }
@@ -243,4 +262,5 @@ tbody tr:hover { background:#fbfefc; }
   .article-shell h2 { font-size:26px; }
   .article-cards { grid-template-columns:1fr; }
   .guide-directory { grid-template-columns:1fr; }
+  .contact-field-grid { grid-template-columns:1fr; }
 }

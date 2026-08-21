@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.verify import router as verification_router
 from app.api.uploads import router as uploads_router
+from app.api.contact import router as contact_router
 from app.config import settings
 
 app = FastAPI(
@@ -20,8 +21,13 @@ app.add_middleware(
 )
 app.include_router(verification_router)
 app.include_router(uploads_router)
+app.include_router(contact_router)
 
 
 @app.get("/health")
 async def health() -> dict[str, str | bool]:
-    return {"status": "ok", "storage": settings.storage_enabled}
+    return {
+        "status": "ok",
+        "storage": settings.storage_enabled,
+        "database": settings.database_enabled,
+    }

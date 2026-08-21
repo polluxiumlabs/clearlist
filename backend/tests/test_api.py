@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.api import contact, uploads
 from app.main import app
 
 client = TestClient(app)
@@ -8,7 +9,7 @@ client = TestClient(app)
 def test_health_reports_no_storage() -> None:
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "storage": False}
+    assert response.json() == {"status": "ok", "storage": False, "database": False}
 
 
 def test_upload_requires_configured_private_storage() -> None:
@@ -17,6 +18,145 @@ def test_upload_requires_configured_private_storage() -> None:
         files={"file": ("contacts.csv", b"Email\nuser@example.com\n", "text/csv")},
     )
     assert response.status_code == 503
+
+
+def test_upload_writes_csv_to_b2_and_only_metadata_to_firestore(monkeypatch) -> None:
+    class FakeStorage:
+        enabled = True
+        body = b""
+
+        @staticmethod
+        def object_key(upload_id: str) -> str:
+            return f"uploads/{upload_id}.csv"
+
+        @staticmethod
+        def deletion_token(upload_id: str) -> str:
+            return f"token-{upload_id}"
+
+        def put_csv(self, upload_id: str, body: bytes) -> None:
+            self.body = body
+
+        def delete_csv(self, upload_id: str) -> None:
+            pass
+
+    class FakeMetadata:
+        enabled = True
+        record = None
+
+        def create_upload(self, **record) -> None:
+            self.record = record
+
+    fake_storage = FakeStorage()
+    fake_metadata = FakeMetadata()
+    monkeypatch.setattr(uploads, "b2_storage", fake_storage)
+    monkeypatch.setattr(uploads, "upload_metadata", fake_metadata)
+
+    response = client.post(
+        "/api/uploads",
+        files={"file": ("private-contacts.csv", b"Email\nuser@example.com\n", "text/csv")},
+    )
+
+    assert response.status_code == 201
+    assert fake_storage.body == b"Email\nuser@example.com\n"
+    assert fake_metadata.record is not None
+    assert fake_metadata.record["size_bytes"] == len(fake_storage.body)
+    assert fake_metadata.record["object_key"].startswith("uploads/")
+    assert "filename" not in fake_metadata.record
+    assert "email" not in fake_metadata.record
+
+
+def test_upload_rolls_back_b2_when_firestore_fails(monkeypatch) -> None:
+    class FakeStorage:
+        enabled = True
+        deleted_upload_id = None
+
+        @staticmethod
+        def object_key(upload_id: str) -> str:
+            return f"uploads/{upload_id}.csv"
+
+        def put_csv(self, upload_id: str, body: bytes) -> None:
+            pass
+
+        def delete_csv(self, upload_id: str) -> None:
+            self.deleted_upload_id = upload_id
+
+    class BrokenMetadata:
+        enabled = True
+
+        def create_upload(self, **record) -> None:
+            raise RuntimeError("Firestore unavailable")
+
+    fake_storage = FakeStorage()
+    monkeypatch.setattr(uploads, "b2_storage", fake_storage)
+    monkeypatch.setattr(uploads, "upload_metadata", BrokenMetadata())
+
+    response = client.post(
+        "/api/uploads",
+        files={"file": ("contacts.csv", b"Email\nuser@example.com\n", "text/csv")},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "The upload database is temporarily unavailable"
+    assert fake_storage.deleted_upload_id is not None
+
+
+def test_contact_form_stores_message_in_firestore(monkeypatch) -> None:
+    class FakeContactStore:
+        enabled = True
+        record = None
+
+        def create_message(self, **record) -> None:
+            self.record = record
+
+    fake_store = FakeContactStore()
+    contact._attempts.clear()
+    monkeypatch.setattr(contact, "contact_messages", fake_store)
+
+    response = client.post(
+        "/api/contact",
+        json={
+            "name": "Rafiq Islam",
+            "email": "RAFIQ@example.com",
+            "topic": "support",
+            "message": "I need help understanding an unknown verification result.",
+            "company_website": "",
+            "privacy_accepted": True,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {"status": "received"}
+    assert fake_store.record is not None
+    assert fake_store.record["email"] == "rafiq@example.com"
+    assert fake_store.record["topic"] == "support"
+
+
+def test_contact_honeypot_does_not_write_to_firestore(monkeypatch) -> None:
+    class FakeContactStore:
+        enabled = True
+        called = False
+
+        def create_message(self, **record) -> None:
+            self.called = True
+
+    fake_store = FakeContactStore()
+    contact._attempts.clear()
+    monkeypatch.setattr(contact, "contact_messages", fake_store)
+
+    response = client.post(
+        "/api/contact",
+        json={
+            "name": "Spam Bot",
+            "email": "bot@example.com",
+            "topic": "other",
+            "message": "This is an automated spam message with enough characters.",
+            "company_website": "https://spam.example",
+            "privacy_accepted": True,
+        },
+    )
+
+    assert response.status_code == 201
+    assert fake_store.called is False
 
 
 def test_invalid_syntax_short_circuits() -> None:

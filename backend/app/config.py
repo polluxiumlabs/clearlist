@@ -1,5 +1,13 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+# Load local development settings without overriding environment variables
+# supplied by Render or another hosting platform.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 
 def _as_bool(value: str | None, default: bool = False) -> bool:
@@ -26,6 +34,11 @@ class Settings:
     b2_key_id: str = os.getenv("B2_KEY_ID", "").strip()
     b2_application_key: str = os.getenv("B2_APPLICATION_KEY", "").strip()
     upload_token_secret: str = os.getenv("UPLOAD_TOKEN_SECRET", "").strip()
+    firebase_project_id: str = os.getenv("FIREBASE_PROJECT_ID", "").strip()
+    firebase_client_email: str = os.getenv("FIREBASE_CLIENT_EMAIL", "").strip()
+    firebase_private_key: str = os.getenv("FIREBASE_PRIVATE_KEY", "").strip().replace("\\n", "\n")
+    firebase_database_id: str = os.getenv("FIREBASE_DATABASE_ID", "(default)").strip() or "(default)"
+    contact_rate_limit_per_hour: int = int(os.getenv("CONTACT_RATE_LIMIT_PER_HOUR", "5"))
     cors_origins: tuple[str, ...] = tuple(
         origin.strip()
         for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
@@ -35,6 +48,10 @@ class Settings:
     @property
     def storage_enabled(self) -> bool:
         return all((self.b2_endpoint, self.b2_region, self.b2_bucket, self.b2_key_id, self.b2_application_key, self.upload_token_secret))
+
+    @property
+    def database_enabled(self) -> bool:
+        return all((self.firebase_project_id, self.firebase_client_email, self.firebase_private_key))
 
 
 settings = Settings()
