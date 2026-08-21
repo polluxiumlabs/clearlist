@@ -9,8 +9,8 @@ button,input { font:inherit; }
 main { min-height:100vh; overflow:hidden; background:radial-gradient(circle at 50% 17%,#edfff6 0,transparent 34rem),linear-gradient(180deg,#fbfcf8 0,#f8fbf8 45rem,#fff 72rem); }
 .nav-shell { width:min(1180px,calc(100% - 48px)); height:84px; margin:auto; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(228,233,229,.8); }
 .brand { display:inline-flex; align-items:center; gap:11px; font-weight:760; font-size:21px; letter-spacing:-.6px; }
-.brand-mark { width:29px; height:29px; display:grid; place-items:center; border-radius:9px; background:var(--ink); transform:rotate(-5deg); }
-.brand-mark span { display:block; width:12px; height:7px; border-left:3px solid #fff; border-bottom:3px solid #fff; transform:rotate(-45deg) translate(1px,-1px); }
+.brand-mark { width:29px; height:29px; display:grid; place-items:center; flex:0 0 auto; }
+.brand-mark img { display:block; width:29px; height:29px; }
 .nav-actions { display:flex; align-items:center; gap:28px; font-size:14px; color:#475467; }
 .nav-actions>a { transition:color .2s; }
 .nav-actions>a:hover { color:var(--mint-dark); }

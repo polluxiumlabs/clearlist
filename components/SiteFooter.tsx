@@ -3,7 +3,7 @@ import Link from "next/link";
 export default function SiteFooter() {
   return (
     <footer className="site-footer">
-      <Link className="brand" href="/" aria-label="Clearlist home"><span className="brand-mark"><span /></span><span>clearlist</span></Link>
+      <Link className="brand" href="/" aria-label="Clearlist home"><span className="brand-mark" aria-hidden="true"><img src="/favicon.svg" alt="" /></span><span>clearlist</span></Link>
       <div className="footer-links">
         <Link href="/guides">Guides</Link>
         <Link href="/email-verification-guide">Verification</Link>

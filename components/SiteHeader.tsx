@@ -4,7 +4,7 @@ export default function SiteHeader() {
   return (
     <nav className="nav-shell" aria-label="Primary navigation">
       <Link className="brand" href="/" aria-label="Clearlist home">
-        <span className="brand-mark"><span /></span><span>clearlist</span>
+        <span className="brand-mark" aria-hidden="true"><img src="/favicon.svg" alt="" /></span><span>clearlist</span>
       </Link>
       <div className="nav-actions">
         <Link href="/#how-it-works">How it works</Link>
