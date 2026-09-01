@@ -2,17 +2,20 @@
 importScripts("/papaparse.min.js");
 
 const aliases = {
-  name: ["name", "full name", "fullname", "contact", "contact name"],
-  title: ["title", "job title", "position", "role"],
-  organization: ["organization", "organisation", "company", "company name", "account"],
-  email: ["email", "email address", "e-mail", "mail"],
+  name: ["name", "full name", "fullname", "contact", "contact name", "first name", "firstname"],
+  title: ["title", "job title", "position", "role", "designation"],
+  organization: ["organization", "organisation", "company", "company name", "account", "business"],
+  email: ["email", "email address", "e mail", "e-mail", "mail", "contact email", "primary email", "work email", "emailaddress"],
 };
 
-const normalizeHeader = (value) => value.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+const normalizeHeader = (value) => value.trim().toLowerCase().replace(/[\W_]+/g, " ").replace(/\s+/g, " ").trim();
 
 const findColumn = (headers, candidates) => {
   const normalized = headers.map(normalizeHeader);
-  const index = normalized.findIndex((header) => candidates.includes(header));
+  let index = normalized.findIndex((header) => candidates.includes(header));
+  if (index < 0) {
+    index = normalized.findIndex((header) => candidates.some((candidate) => header.includes(candidate)));
+  }
   return index >= 0 ? headers[index] : undefined;
 };
 
@@ -28,9 +31,24 @@ self.onmessage = ({ data }) => {
       }
 
       const headers = meta.fields || [];
-      const emailColumn = findColumn(headers, aliases.email);
+      let emailColumn = findColumn(headers, aliases.email);
+
+      // Fallback: look through sample data rows to detect which column contains email addresses
       if (!emailColumn) {
-        self.postMessage({ error: "We couldn’t find an email column. Name it Email or Email Address and try again." });
+        for (const col of headers) {
+          const sampleHasEmail = rawRows.slice(0, 15).some((r) => {
+            const val = String(r[col] || "").trim();
+            return val.includes("@") && val.includes(".");
+          });
+          if (sampleHasEmail) {
+            emailColumn = col;
+            break;
+          }
+        }
+      }
+
+      if (!emailColumn) {
+        self.postMessage({ error: "We couldn’t find an email column. Please ensure your CSV has an Email or Email Address column." });
         return;
       }
 
@@ -59,11 +77,12 @@ self.onmessage = ({ data }) => {
           title: titleColumn ? String(raw[titleColumn] || "").trim() : "",
           organization: organizationColumn ? String(raw[organizationColumn] || "").trim() : "",
           email,
+          raw,
         });
       });
 
       self.postMessage({
-        payload: { rows, duplicates, emptyEmails, sourceRows: rawRows.length },
+        payload: { rows, duplicates, emptyEmails, sourceRows: rawRows.length, headers },
       });
     },
   });

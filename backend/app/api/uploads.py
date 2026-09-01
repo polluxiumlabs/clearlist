@@ -86,6 +86,28 @@ async def upload_csv(file: UploadFile = File(...)) -> StoredUpload:
     )
 
 
+class SaveCleanCsvRequest(BaseModel):
+    csv_content: str
+
+
+@router.post("/{upload_id}/clean")
+async def save_clean_csv(upload_id: str, payload: SaveCleanCsvRequest, x_delete_token: str = Header(...)) -> dict[str, str]:
+    if not re.fullmatch(r"[a-f0-9]{32}", upload_id) or not b2_storage.token_is_valid(upload_id, x_delete_token):
+        raise HTTPException(status_code=404, detail="Stored CSV not found")
+    if not b2_storage.enabled:
+        raise HTTPException(status_code=503, detail="Storage not configured")
+
+    clean_bytes = payload.csv_content.encode("utf-8-sig")
+    try:
+        await asyncio.to_thread(b2_storage.put_clean_csv, upload_id, clean_bytes)
+        if upload_metadata.enabled:
+            await asyncio.to_thread(upload_metadata.mark_cleaned, upload_id, len(clean_bytes))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Failed to store clean CSV") from exc
+
+    return {"status": "stored", "sizeBytes": str(len(clean_bytes))}
+
+
 @router.delete("/{upload_id}")
 async def delete_csv(upload_id: str, x_delete_token: str = Header(...)) -> dict[str, str]:
     if not re.fullmatch(r"[a-f0-9]{32}", upload_id) or not b2_storage.token_is_valid(upload_id, x_delete_token):

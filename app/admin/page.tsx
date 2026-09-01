@@ -77,6 +77,10 @@ export default function AdminPage() {
   const [actionMessage, setActionMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
+  const [selectedUploadIds, setSelectedUploadIds] = useState<string[]>([]);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
+
   // Check saved session on mount
   useEffect(() => {
     const savedToken = sessionStorage.getItem("clearlist_admin_token");
@@ -95,7 +99,16 @@ export default function AdminPage() {
         headers: { "X-Admin-Token": key },
       });
       if (!res.ok) {
-        throw new Error("Invalid admin key. Please check your credentials.");
+        let errorMsg = "Invalid admin key. Please check your credentials.";
+        try {
+          const data = await res.json();
+          if (data?.detail) {
+            errorMsg = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
+          }
+        } catch {
+          // fallback to default error message
+        }
+        throw new Error(errorMsg);
       }
       sessionStorage.setItem("clearlist_admin_token", key);
       setIsAuthenticated(true);
@@ -137,6 +150,8 @@ export default function AdminPage() {
     setStats(null);
     setUploads([]);
     setMessages([]);
+    setSelectedUploadIds([]);
+    setSelectedMessageIds([]);
   };
 
   const downloadFile = async (uploadId: string, type: "original" | "clean") => {
@@ -147,18 +162,25 @@ export default function AdminPage() {
       const res = await fetch(endpoint, {
         headers: { "X-Admin-Token": token },
       });
-      if (!res.ok) throw new Error(`Failed to download ${type} CSV`);
+      if (!res.ok) {
+        let errMessage = `Failed to download ${type} CSV`;
+        try {
+          const data = await res.json();
+          if (data?.detail) errMessage = data.detail;
+        } catch {}
+        throw new Error(errMessage);
+      }
       
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${type}-${uploadId}.csv`;
+      a.download = `${type === "clean" ? "cleanup" : "original"}-${uploadId}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       window.URL.revokeObjectURL(url);
-      setActionMessage({ text: `Downloaded ${type} CSV successfully.`, type: "success" });
+      setActionMessage({ text: `Downloaded ${type === "clean" ? "cleanup" : "original"} CSV successfully.`, type: "success" });
     } catch (err: any) {
       setActionMessage({ text: err.message || "Download failed", type: "error" });
     } finally {
@@ -178,11 +200,173 @@ export default function AdminPage() {
       if (!res.ok) throw new Error("Failed to delete upload");
       setActionMessage({ text: `Upload ${uploadId} deleted successfully.`, type: "success" });
       setUploads((prev) => prev.filter((u) => u.uploadId !== uploadId));
+      setSelectedUploadIds((prev) => prev.filter((id) => id !== uploadId));
       if (stats) {
-        setStats({ ...stats, total_uploads: stats.total_uploads - 1 });
+        setStats({ ...stats, total_uploads: Math.max(0, stats.total_uploads - 1) });
       }
     } catch (err: any) {
       setActionMessage({ text: err.message || "Deletion failed", type: "error" });
+    }
+  };
+
+  const toggleSelectUpload = (id: string) => {
+    setSelectedUploadIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllUploads = () => {
+    const visibleIds = filteredUploads.map((u) => u.uploadId);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedUploadIds.includes(id));
+    if (allSelected) {
+      setSelectedUploadIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+    } else {
+      setSelectedUploadIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  const deleteSelectedUploads = async () => {
+    if (!selectedUploadIds.length) return;
+    if (!confirm(`Are you sure you want to delete ${selectedUploadIds.length} selected upload(s) from Backblaze B2 and Firestore?`)) {
+      return;
+    }
+    setIsDeletingSelected(true);
+    setActionMessage(null);
+    try {
+      let success = false;
+      let count = selectedUploadIds.length;
+      try {
+        const res = await fetch(`${API_URL}/api/admin/uploads/batch-delete`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Admin-Token": token,
+          },
+          body: JSON.stringify({ upload_ids: selectedUploadIds }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          count = data.deleted_count || selectedUploadIds.length;
+          success = true;
+        }
+      } catch {}
+
+      if (!success) {
+        const results = await Promise.all(
+          selectedUploadIds.map(async (id) => {
+            const res = await fetch(`${API_URL}/api/admin/uploads/${id}`, {
+              method: "DELETE",
+              headers: { "X-Admin-Token": token },
+            });
+            return res.ok;
+          })
+        );
+        const deletedCount = results.filter(Boolean).length;
+        if (deletedCount === 0) {
+          throw new Error("Failed to delete selected uploads. Make sure the backend is running.");
+        }
+        count = deletedCount;
+      }
+
+      setActionMessage({ text: `Deleted ${count} upload(s) successfully.`, type: "success" });
+      setUploads((prev) => prev.filter((u) => !selectedUploadIds.includes(u.uploadId)));
+      if (stats) {
+        setStats({ ...stats, total_uploads: Math.max(0, stats.total_uploads - count) });
+      }
+      setSelectedUploadIds([]);
+    } catch (err: any) {
+      setActionMessage({ text: err.message || "Bulk deletion failed", type: "error" });
+    } finally {
+      setIsDeletingSelected(false);
+    }
+  };
+
+  const toggleSelectMessage = (id: string) => {
+    setSelectedMessageIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllMessages = () => {
+    const allIds = messages.map((m) => m.id || m.messageId);
+    const allSelected = allIds.length > 0 && allIds.every((id) => selectedMessageIds.includes(id));
+    if (allSelected) {
+      setSelectedMessageIds([]);
+    } else {
+      setSelectedMessageIds(allIds);
+    }
+  };
+
+  const deleteMessage = async (messageId: string) => {
+    if (!confirm("Are you sure you want to delete this message?")) return;
+    try {
+      const res = await fetch(`${API_URL}/api/admin/messages/${messageId}`, {
+        method: "DELETE",
+        headers: { "X-Admin-Token": token },
+      });
+      if (!res.ok) throw new Error("Failed to delete message");
+      setActionMessage({ text: "Message deleted successfully.", type: "success" });
+      setMessages((prev) => prev.filter((m) => (m.id || m.messageId) !== messageId));
+      if (stats) {
+        setStats({ ...stats, total_messages: Math.max(0, stats.total_messages - 1) });
+      }
+      setSelectedMessageIds((prev) => prev.filter((id) => id !== messageId));
+    } catch (err: any) {
+      setActionMessage({ text: err.message || "Failed to delete message", type: "error" });
+    }
+  };
+
+  const deleteSelectedMessages = async () => {
+    if (!selectedMessageIds.length) return;
+    if (!confirm(`Are you sure you want to delete ${selectedMessageIds.length} selected message(s)?`)) return;
+    setIsDeletingSelected(true);
+    setActionMessage(null);
+    try {
+      let success = false;
+      let count = selectedMessageIds.length;
+      try {
+        const res = await fetch(`${API_URL}/api/admin/messages/batch-delete`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Admin-Token": token,
+          },
+          body: JSON.stringify({ message_ids: selectedMessageIds }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          count = data.deleted_count || selectedMessageIds.length;
+          success = true;
+        }
+      } catch {}
+
+      if (!success) {
+        const results = await Promise.all(
+          selectedMessageIds.map(async (id) => {
+            const res = await fetch(`${API_URL}/api/admin/messages/${id}`, {
+              method: "DELETE",
+              headers: { "X-Admin-Token": token },
+            });
+            return res.ok;
+          })
+        );
+        const deletedCount = results.filter(Boolean).length;
+        if (deletedCount === 0) {
+          throw new Error("Failed to delete selected messages");
+        }
+        count = deletedCount;
+      }
+
+      setActionMessage({ text: `Deleted ${count} message(s) successfully.`, type: "success" });
+      setMessages((prev) => prev.filter((m) => !selectedMessageIds.includes(m.id || m.messageId)));
+      if (stats) {
+        setStats({ ...stats, total_messages: Math.max(0, stats.total_messages - count) });
+      }
+      setSelectedMessageIds([]);
+    } catch (err: any) {
+      setActionMessage({ text: err.message || "Failed to delete messages", type: "error" });
+    } finally {
+      setIsDeletingSelected(false);
     }
   };
 
@@ -352,21 +536,62 @@ export default function AdminPage() {
             {activeTab === "uploads" && (
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
-                  <input
-                    type="text"
-                    placeholder="Search by upload ID or status..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{
-                      padding: "10px 16px",
-                      background: "var(--surface)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "8px",
-                      color: "inherit",
-                      fontSize: "14px",
-                      minWidth: "280px",
-                    }}
-                  />
+                  <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                    <input
+                      type="text"
+                      placeholder="Search by upload ID or status..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      style={{
+                        padding: "10px 16px",
+                        background: "var(--surface)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        color: "inherit",
+                        fontSize: "14px",
+                        minWidth: "260px",
+                      }}
+                    />
+                    {selectedUploadIds.length > 0 && (
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)" }}>
+                          {selectedUploadIds.length} selected
+                        </span>
+                        <button
+                          type="button"
+                          onClick={deleteSelectedUploads}
+                          disabled={isDeletingSelected}
+                          style={{
+                            padding: "8px 14px",
+                            fontSize: "13px",
+                            fontWeight: 600,
+                            borderRadius: "6px",
+                            background: "rgba(239,68,68,0.2)",
+                            border: "1px solid rgba(239,68,68,0.4)",
+                            color: "#f87171",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {isDeletingSelected ? "Deleting..." : `Delete Selected (${selectedUploadIds.length})`}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUploadIds([])}
+                          style={{
+                            padding: "8px 12px",
+                            fontSize: "13px",
+                            borderRadius: "6px",
+                            background: "transparent",
+                            border: "1px solid var(--border)",
+                            color: "var(--muted)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <span style={{ fontSize: "13px", color: "var(--muted)" }}>
                     Showing {filteredUploads.length} of {uploads.length} uploads
                   </span>
@@ -376,6 +601,15 @@ export default function AdminPage() {
                   <table>
                     <thead>
                       <tr>
+                        <th style={{ width: "40px", textAlign: "center" }}>
+                          <input
+                            type="checkbox"
+                            aria-label="Select all uploads"
+                            checked={filteredUploads.length > 0 && filteredUploads.every((u) => selectedUploadIds.includes(u.uploadId))}
+                            onChange={toggleSelectAllUploads}
+                            style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                          />
+                        </th>
                         <th>Upload ID</th>
                         <th>Original Size</th>
                         <th>Cleaned Size</th>
@@ -388,85 +622,97 @@ export default function AdminPage() {
                     <tbody>
                       {filteredUploads.length === 0 ? (
                         <tr>
-                          <td colSpan={7} style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>
+                          <td colSpan={8} style={{ textAlign: "center", padding: "40px", color: "var(--muted)" }}>
                             No CSV uploads found matching your search.
                           </td>
                         </tr>
                       ) : (
-                        filteredUploads.map((u) => (
-                          <tr key={u.uploadId}>
-                            <td>
-                              <code style={{ fontSize: "12px", color: "#38bdf8", background: "rgba(56,189,248,0.1)", padding: "2px 6px", borderRadius: "4px" }}>
-                                {u.uploadId}
-                              </code>
-                            </td>
-                            <td>{formatBytes(u.sizeBytes)}</td>
-                            <td>{u.cleanSizeBytes ? formatBytes(u.cleanSizeBytes) : <span style={{ color: "var(--muted)" }}>On-demand</span>}</td>
-                            <td style={{ fontSize: "13px" }}>{formatDate(u.createdAt)}</td>
-                            <td style={{ fontSize: "13px", color: "var(--muted)" }}>{formatDate(u.expiresAt)}</td>
-                            <td>
-                              <span className={`status-tag ${u.status === "stored" ? "valid" : "invalid"}`}>
-                                {u.status || "stored"}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: "right" }}>
-                              <div style={{ display: "inline-flex", gap: "6px", alignItems: "center" }}>
-                                <button
-                                  type="button"
-                                  title="Download raw original CSV file from Backblaze B2"
-                                  onClick={() => downloadFile(u.uploadId, "original")}
-                                  disabled={downloadingId === `${u.uploadId}-original`}
-                                  style={{
-                                    padding: "6px 10px",
-                                    fontSize: "12px",
-                                    fontWeight: 600,
-                                    borderRadius: "6px",
-                                    background: "rgba(56,189,248,0.15)",
-                                    border: "1px solid rgba(56,189,248,0.3)",
-                                    color: "#38bdf8",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  {downloadingId === `${u.uploadId}-original` ? "..." : "Original"}
-                                </button>
-                                <button
-                                  type="button"
-                                  title="Download final cleanup CSV file"
-                                  onClick={() => downloadFile(u.uploadId, "clean")}
-                                  disabled={downloadingId === `${u.uploadId}-clean`}
-                                  style={{
-                                    padding: "6px 10px",
-                                    fontSize: "12px",
-                                    fontWeight: 600,
-                                    borderRadius: "6px",
-                                    background: "rgba(16,185,129,0.15)",
-                                    border: "1px solid rgba(16,185,129,0.3)",
-                                    color: "#34d399",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  {downloadingId === `${u.uploadId}-clean` ? "..." : "Cleanup"}
-                                </button>
-                                <button
-                                  type="button"
-                                  title="Delete CSV from B2 & Firestore"
-                                  onClick={() => deleteUpload(u.uploadId)}
-                                  style={{
-                                    padding: "6px 10px",
-                                    fontSize: "12px",
-                                    borderRadius: "6px",
-                                    background: "rgba(239,68,68,0.15)",
-                                    border: "1px solid rgba(239,68,68,0.3)",
-                                    color: "#f87171",
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
+                        filteredUploads.map((u) => {
+                          const isSelected = selectedUploadIds.includes(u.uploadId);
+                          return (
+                            <tr key={u.uploadId} style={{ background: isSelected ? "rgba(99,102,241,0.08)" : undefined }}>
+                              <td style={{ textAlign: "center" }}>
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Select upload ${u.uploadId}`}
+                                  checked={isSelected}
+                                  onChange={() => toggleSelectUpload(u.uploadId)}
+                                  style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                                />
+                              </td>
+                              <td>
+                                <code style={{ fontSize: "12px", color: "#38bdf8", background: "rgba(56,189,248,0.1)", padding: "2px 6px", borderRadius: "4px" }}>
+                                  {u.uploadId}
+                                </code>
+                              </td>
+                              <td>{formatBytes(u.sizeBytes)}</td>
+                              <td>{u.cleanSizeBytes ? formatBytes(u.cleanSizeBytes) : <span style={{ color: "var(--muted)" }}>On-demand</span>}</td>
+                              <td style={{ fontSize: "13px" }}>{formatDate(u.createdAt)}</td>
+                              <td style={{ fontSize: "13px", color: "var(--muted)" }}>{formatDate(u.expiresAt)}</td>
+                              <td>
+                                <span className={`status-tag ${u.status === "stored" ? "valid" : "invalid"}`}>
+                                  {u.status || "stored"}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: "right" }}>
+                                <div style={{ display: "inline-flex", gap: "6px", alignItems: "center" }}>
+                                  <button
+                                    type="button"
+                                    title="Download raw original CSV file from Backblaze B2"
+                                    onClick={() => downloadFile(u.uploadId, "original")}
+                                    disabled={downloadingId === `${u.uploadId}-original`}
+                                    style={{
+                                      padding: "6px 10px",
+                                      fontSize: "12px",
+                                      fontWeight: 600,
+                                      borderRadius: "6px",
+                                      background: "rgba(56,189,248,0.15)",
+                                      border: "1px solid rgba(56,189,248,0.3)",
+                                      color: "#38bdf8",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    {downloadingId === `${u.uploadId}-original` ? "..." : "Original"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Download final cleanup CSV file"
+                                    onClick={() => downloadFile(u.uploadId, "clean")}
+                                    disabled={downloadingId === `${u.uploadId}-clean`}
+                                    style={{
+                                      padding: "6px 10px",
+                                      fontSize: "12px",
+                                      fontWeight: 600,
+                                      borderRadius: "6px",
+                                      background: "rgba(16,185,129,0.15)",
+                                      border: "1px solid rgba(16,185,129,0.3)",
+                                      color: "#34d399",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    {downloadingId === `${u.uploadId}-clean` ? "..." : "Cleanup"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Delete CSV from B2 & Firestore"
+                                    onClick={() => deleteUpload(u.uploadId)}
+                                    style={{
+                                      padding: "6px 10px",
+                                      fontSize: "12px",
+                                      borderRadius: "6px",
+                                      background: "rgba(239,68,68,0.15)",
+                                      border: "1px solid rgba(239,68,68,0.3)",
+                                      color: "#f87171",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -477,32 +723,121 @@ export default function AdminPage() {
             {/* TAB 2: CONTACT MESSAGES */}
             {activeTab === "messages" && (
               <div>
+                {messages.length > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        onClick={toggleSelectAllMessages}
+                        style={{
+                          padding: "8px 12px",
+                          fontSize: "13px",
+                          borderRadius: "6px",
+                          background: "var(--surface)",
+                          border: "1px solid var(--border)",
+                          color: "inherit",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {messages.length > 0 && messages.every((m) => selectedMessageIds.includes(m.id || m.messageId))
+                          ? "Deselect All"
+                          : "Select All"}
+                      </button>
+                      {selectedMessageIds.length > 0 && (
+                        <>
+                          <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)" }}>
+                            {selectedMessageIds.length} selected
+                          </span>
+                          <button
+                            type="button"
+                            onClick={deleteSelectedMessages}
+                            disabled={isDeletingSelected}
+                            style={{
+                              padding: "8px 14px",
+                              fontSize: "13px",
+                              fontWeight: 600,
+                              borderRadius: "6px",
+                              background: "rgba(239,68,68,0.2)",
+                              border: "1px solid rgba(239,68,68,0.4)",
+                              color: "#f87171",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {isDeletingSelected ? "Deleting..." : `Delete Selected (${selectedMessageIds.length})`}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <span style={{ fontSize: "13px", color: "var(--muted)" }}>
+                      {messages.length} total inquiries
+                    </span>
+                  </div>
+                )}
+
                 {messages.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "60px 20px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px", color: "var(--muted)" }}>
                     No contact form messages have been submitted yet.
                   </div>
                 ) : (
                   <div style={{ display: "grid", gap: "16px" }}>
-                    {messages.map((m) => (
-                      <div key={m.id || m.messageId} style={{ padding: "20px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "12px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
-                          <div>
-                            <strong style={{ fontSize: "16px", display: "block" }}>{m.name}</strong>
-                            <a href={`mailto:${m.email}`} style={{ color: "var(--accent, #38bdf8)", fontSize: "13px" }}>
-                              {m.email}
-                            </a>
+                    {messages.map((m) => {
+                      const msgId = m.id || m.messageId;
+                      const isSelected = selectedMessageIds.includes(msgId);
+                      return (
+                        <div
+                          key={msgId}
+                          style={{
+                            padding: "20px",
+                            background: isSelected ? "rgba(99,102,241,0.08)" : "var(--surface)",
+                            border: isSelected ? "1px solid rgba(99,102,241,0.4)" : "1px solid var(--border)",
+                            borderRadius: "12px",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+                            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                              <input
+                                type="checkbox"
+                                aria-label={`Select message from ${m.name}`}
+                                checked={isSelected}
+                                onChange={() => toggleSelectMessage(msgId)}
+                                style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                              />
+                              <div>
+                                <strong style={{ fontSize: "16px", display: "block" }}>{m.name}</strong>
+                                <a href={`mailto:${m.email}`} style={{ color: "var(--accent, #38bdf8)", fontSize: "13px" }}>
+                                  {m.email}
+                                </a>
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                              <span style={{ fontSize: "12px", color: "var(--muted)" }}>{formatDate(m.submittedAt)}</span>
+                              <button
+                                type="button"
+                                onClick={() => deleteMessage(msgId)}
+                                style={{
+                                  padding: "4px 8px",
+                                  fontSize: "12px",
+                                  borderRadius: "4px",
+                                  background: "rgba(239,68,68,0.15)",
+                                  border: "1px solid rgba(239,68,68,0.3)",
+                                  color: "#f87171",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </div>
-                          <span style={{ fontSize: "12px", color: "var(--muted)" }}>{formatDate(m.submittedAt)}</span>
+                          <div style={{ marginBottom: "8px" }}>
+                            <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>Topic: </span>
+                            <strong style={{ fontSize: "13px" }}>{m.topic || "General"}</strong>
+                          </div>
+                          <p style={{ margin: 0, fontSize: "14px", lineHeight: "1.6", whiteSpace: "pre-wrap", color: "var(--foreground)" }}>
+                            {m.message}
+                          </p>
                         </div>
-                        <div style={{ marginBottom: "8px" }}>
-                          <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--muted)" }}>Topic: </span>
-                          <strong style={{ fontSize: "13px" }}>{m.topic || "General"}</strong>
-                        </div>
-                        <p style={{ margin: 0, fontSize: "14px", lineHeight: "1.6", whiteSpace: "pre-wrap", color: "var(--foreground)" }}>
-                          {m.message}
-                        </p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

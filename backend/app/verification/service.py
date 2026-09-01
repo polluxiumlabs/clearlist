@@ -11,6 +11,7 @@ from .result import VerificationResult
 from .role import is_role_address
 from .smtp import probe_mailbox
 from .syntax import normalize_email
+from .typos import detect_domain_typo
 
 
 class VerificationService:
@@ -53,20 +54,76 @@ class VerificationService:
         if normalized is None:
             return VerificationResult(email=raw_email.strip().lower(), syntax=False, status="invalid", reason="Invalid email syntax")
 
-        domain = normalized.rsplit("@", 1)[1]
+        local_part, domain = normalized.rsplit("@", 1)
         disposable = is_disposable(domain)
         role = is_role_address(normalized)
+        typo_domain = detect_domain_typo(domain)
+        suggested_email = f"{local_part}@{typo_domain}" if typo_domain else None
 
         async with self.global_limit, self.domain_limits[domain]:
             facts = await self._domain_facts(domain)
+            if facts.null_mx:
+                return VerificationResult(
+                    email=normalized,
+                    syntax=True,
+                    domain=True,
+                    mx=False,
+                    disposable=disposable,
+                    role=role,
+                    suggested_email=suggested_email,
+                    status="invalid",
+                    reason="Domain explicitly rejects all email (Null MX)",
+                )
             if facts.exists is False:
-                return VerificationResult(email=normalized, syntax=True, domain=False, mx=False, disposable=disposable, role=role, status="invalid", reason="Domain does not exist")
+                reason = f"Domain does not exist (did you mean {suggested_email}?)" if suggested_email else "Domain does not exist"
+                return VerificationResult(
+                    email=normalized,
+                    syntax=True,
+                    domain=False,
+                    mx=False,
+                    disposable=disposable,
+                    role=role,
+                    suggested_email=suggested_email,
+                    status="invalid",
+                    reason=reason,
+                )
             if facts.exists is None:
-                return VerificationResult(email=normalized, syntax=True, domain=None, mx=None, disposable=disposable, role=role, status="unknown", reason="DNS lookup did not answer")
+                return VerificationResult(
+                    email=normalized,
+                    syntax=True,
+                    domain=None,
+                    mx=None,
+                    disposable=disposable,
+                    role=role,
+                    suggested_email=suggested_email,
+                    status="unknown",
+                    reason="DNS lookup did not answer",
+                )
             if facts.has_mx is False:
-                return VerificationResult(email=normalized, syntax=True, domain=True, mx=False, disposable=disposable, role=role, status="invalid", reason="No MX records found")
+                reason = f"No MX records found (did you mean {suggested_email}?)" if suggested_email else "No MX records found"
+                return VerificationResult(
+                    email=normalized,
+                    syntax=True,
+                    domain=True,
+                    mx=False,
+                    disposable=disposable,
+                    role=role,
+                    suggested_email=suggested_email,
+                    status="invalid",
+                    reason=reason,
+                )
             if facts.has_mx is None or not facts.mx_hosts:
-                return VerificationResult(email=normalized, syntax=True, domain=True, mx=None, disposable=disposable, role=role, status="unknown", reason="Mail server could not be determined")
+                return VerificationResult(
+                    email=normalized,
+                    syntax=True,
+                    domain=True,
+                    mx=None,
+                    disposable=disposable,
+                    role=role,
+                    suggested_email=suggested_email,
+                    status="unknown",
+                    reason="Mail server could not be determined",
+                )
 
             smtp = "unknown"
             catch_all: bool | None = None
@@ -75,7 +132,10 @@ class VerificationService:
                 if smtp == "accepted" and settings.catch_all_enabled:
                     catch_all = await self._catch_all(domain, facts.mx_hosts[0])
 
-            if smtp == "rejected":
+            if typo_domain and domain != typo_domain:
+                status = "risky" if smtp == "accepted" else "invalid"
+                reason = f"Possible domain typo (did you mean {suggested_email}?)"
+            elif smtp == "rejected":
                 status, reason = "invalid", "Mailbox rejected the address"
             elif disposable:
                 status, reason = "risky", "Disposable email provider"
@@ -97,6 +157,10 @@ class VerificationService:
                 role=role,
                 smtp=smtp,
                 catch_all=catch_all,
+                spf=facts.has_spf,
+                dmarc=facts.has_dmarc,
+                provider=facts.provider,
+                suggested_email=suggested_email,
                 status=status,
                 reason=reason,
             )

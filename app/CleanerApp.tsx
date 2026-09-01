@@ -28,6 +28,7 @@ export default function CleanerApp() {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [rows, setRows] = useState<ContactRow[]>([]);
+  const [rawFile, setRawFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState("");
   const [parseInfo, setParseInfo] = useState<Omit<ParsedPayload, "rows"> | null>(null);
   const [error, setError] = useState("");
@@ -38,7 +39,7 @@ export default function CleanerApp() {
   const [filter, setFilter] = useState<"all" | VerificationStatus>("all");
   const [includeRisky, setIncludeRisky] = useState(false);
   const [includeUnknown, setIncludeUnknown] = useState(false);
-  const [storeCopy, setStoreCopy] = useState(false);
+  const [storeCopy, setStoreCopy] = useState(true);
   const [storedUpload, setStoredUpload] = useState<StoredUpload | null>(null);
   const [storageMessage, setStorageMessage] = useState("");
 
@@ -48,10 +49,12 @@ export default function CleanerApp() {
     return values;
   }, [rows]);
 
-  const visibleRows = useMemo(() => rows.filter(({ verification }) => {
+  const filteredRows = useMemo(() => rows.filter(({ verification }) => {
     if (filter === "all") return true;
     return verification?.status === filter;
-  }).slice(0, 100), [rows, filter]);
+  }), [rows, filter]);
+
+  const visibleRows = useMemo(() => filteredRows.slice(0, 500), [filteredRows]);
 
   const hasResults = completed > 0;
   const progress = rows.length ? Math.round((completed / rows.length) * 100) : 0;
@@ -97,6 +100,7 @@ export default function CleanerApp() {
     setRows([]);
     setCompleted(0);
     setFileName(file.name);
+    setRawFile(file);
     setStorageMessage("");
     if (storedUpload) await deleteStoredCopy(true);
 
@@ -114,7 +118,12 @@ export default function CleanerApp() {
       if (!result.rows.length) throw new Error("No email addresses were found in this CSV.");
       if (result.rows.length > 50_000) throw new Error("This version supports up to 50,000 unique email addresses per file.");
       setRows(result.rows);
-      setParseInfo({ duplicates: result.duplicates, emptyEmails: result.emptyEmails, sourceRows: result.sourceRows });
+      setParseInfo({
+        duplicates: result.duplicates,
+        emptyEmails: result.emptyEmails,
+        sourceRows: result.sourceRows,
+        headers: result.headers,
+      });
       if (storeCopy) {
         try {
           await storeCsv(file);
@@ -124,6 +133,7 @@ export default function CleanerApp() {
       }
     } catch (caught) {
       setFileName("");
+      setRawFile(null);
       setError(caught instanceof Error ? caught.message : "The CSV could not be read.");
     } finally {
       setParsing(false);
@@ -148,6 +158,7 @@ export default function CleanerApp() {
     abortRef.current = controller;
 
     try {
+      let accumulatedRows: ContactRow[] = rows.map((row) => ({ ...row, verification: undefined }));
       for (let start = 0; start < rows.length; start += BATCH_SIZE) {
         const batch = rows.slice(start, start + BATCH_SIZE);
         const response = await fetch(`${API_URL}/api/verify-batch`, {
@@ -156,15 +167,33 @@ export default function CleanerApp() {
           body: JSON.stringify({ emails: batch.map(({ email }) => email) }),
           signal: controller.signal,
         });
-        if (!response.ok) throw new Error(response.status === 429 ? "The verifier is busy. Wait a moment and try again." : "The verification service returned an error.");
+        if (!response.ok) {
+          throw new Error(response.status === 429 ? "The verifier is busy. Wait a moment and try again." : "The verification service returned an error.");
+        }
         const data = await response.json() as { results: VerificationResult[] };
         const byEmail = new Map(data.results.map((result) => [result.email, result]));
-        setRows((current) => current.map((row) => byEmail.has(row.email) ? { ...row, verification: byEmail.get(row.email) } : row));
+
+        accumulatedRows = accumulatedRows.map((row) => byEmail.has(row.email) ? { ...row, verification: byEmail.get(row.email) } : row);
+        setRows(accumulatedRows);
         setCompleted(Math.min(start + batch.length, rows.length));
+      }
+
+      if (storedUpload) {
+        const validOnly = accumulatedRows.filter((r) => r.verification?.status === "valid");
+        const cleanText = generateCsv(validOnly);
+        fetch(`${API_URL}/api/uploads/${storedUpload.upload_id}/clean`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Delete-Token": storedUpload.deletion_token,
+          },
+          body: JSON.stringify({ csv_content: cleanText }),
+        }).catch(() => { });
       }
     } catch (caught) {
       if ((caught as Error).name !== "AbortError") {
-        setError(`Couldn’t reach the verification service at ${API_URL}. Start the FastAPI backend, then try again.`);
+        const msg = (caught as Error).message;
+        setError(msg && !msg.includes("Failed to fetch") ? msg : `Couldn’t reach the verification service at ${API_URL}. Please ensure the FastAPI backend is running on port 8000.`);
       }
     } finally {
       setVerifying(false);
@@ -177,6 +206,7 @@ export default function CleanerApp() {
     abortRef.current?.abort();
     await deleteStoredCopy(true);
     setRows([]);
+    setRawFile(null);
     setFileName("");
     setParseInfo(null);
     setCompleted(0);
@@ -185,12 +215,53 @@ export default function CleanerApp() {
     setFilter("all");
   };
 
-  const download = () => {
+  const generateCsv = (targetRows: ContactRow[]) => {
+    const baseHeaders = parseInfo?.headers && parseInfo.headers.length ? parseInfo.headers : ["Name", "Title", "Organization", "Email"];
+    const exportHeaders = [...baseHeaders, "Status", "Reason"];
+
+    const headerLine = exportHeaders.map(csvCell).join(",");
+    const dataLines = targetRows.map((row) => {
+      const lineValues = baseHeaders.map((h) => {
+        const hNorm = h.trim().toLowerCase().replace(/[\W_]+/g, "");
+        if (hNorm.includes("email") || hNorm === "mail") {
+          return row.email;
+        }
+        if (row.raw && row.raw[h] !== undefined) {
+          return String(row.raw[h]);
+        }
+        if (hNorm.includes("name")) return row.name;
+        if (hNorm.includes("title") || hNorm.includes("role") || hNorm.includes("position")) return row.title;
+        if (hNorm.includes("org") || hNorm.includes("company")) return row.organization;
+        return "";
+      });
+
+      lineValues.push(row.verification?.status || "valid");
+      lineValues.push(row.verification?.reason || "Mailbox accepted");
+
+      return lineValues.map(csvCell).join(",");
+    });
+
+    return [headerLine, ...dataLines].join("\r\n");
+  };
+
+  const downloadClean = () => {
+    if (!hasResults) {
+      setError("Please click 'Verify addresses' to verify your list before downloading.");
+      return;
+    }
+
     const allowed = new Set<VerificationStatus>(["valid"]);
     if (includeRisky) allowed.add("risky");
     if (includeUnknown) allowed.add("unknown");
+
     const cleanRows = rows.filter((row) => row.verification && allowed.has(row.verification.status));
-    const csv = ["Name,Title,Organization,Email", ...cleanRows.map((row) => [row.name, row.title, row.organization, row.email].map(csvCell).join(","))].join("\r\n");
+
+    if (!cleanRows.length) {
+      setError("No contacts match your selected filter (valid" + (includeRisky ? " + risky" : "") + (includeUnknown ? " + unknown" : "") + ").");
+      return;
+    }
+
+    const csv = generateCsv(cleanRows);
     const url = URL.createObjectURL(new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -204,7 +275,6 @@ export default function CleanerApp() {
       <SiteHeader />
 
       <section className={`hero ${rows.length ? "hero-compact" : ""}`} id="top">
-        <span className="hero-label">Email verification + list quality</span>
         <h1>A cleaner list.<br /><em>A clearer send.</em></h1>
         <p className="hero-copy">Understand every address, remove decisive failures, and download a campaign-ready CSV with clear controls for optional short-term storage.</p>
 
@@ -223,14 +293,14 @@ export default function CleanerApp() {
               <div className="preview-top"><span>What you’ll get</span><span className="live-label"><i /> Live results</span></div>
               <div className="sample-row"><div className="avatar">AS</div><div><strong>Alex Smith</strong><span>alex@northstar.co</span></div><b className="valid-tag">Valid</b></div>
               <div className="check-grid"><div><span>Syntax</span><b>Pass</b></div><div><span>Domain</span><b>Active</b></div><div><span>MX records</span><b>Found</b></div><div><span>Mailbox</span><b>Accepted</b></div></div>
-              <div className="decision-line"><span className="decision-icon">✓</span><div><strong>Safe to keep</strong><span>This address is ready for your next send.</span></div></div>
+              <div className="decision-line"><span className="">✓</span><div><strong>Safe to keep</strong><span>This address is ready for your next send.</span></div></div>
             </aside>
           </div>
         ) : (
           <section className="dashboard" aria-live="polite">
             <header className="dashboard-head">
               <div className="file-heading"><span className="file-icon" aria-hidden="true"><span className="file-sheet"><i /><i /><i /></span></span><div><strong>{fileName}</strong><span>{rows.length.toLocaleString()} unique addresses{parseInfo?.duplicates ? ` · ${parseInfo.duplicates.toLocaleString()} duplicates removed` : ""}</span></div></div>
-              <div className="head-actions">{storedUpload && <button className="delete-button" type="button" onClick={() => deleteStoredCopy()}>Delete stored copy</button>}<button className="text-button" type="button" onClick={reset}>Replace file</button>{!hasResults && <button className="primary-button" type="button" onClick={verify} disabled={verifying}>{verifying ? "Verifying…" : "Verify addresses"}</button>}</div>
+              <div className="head-actions"><button className="text-button" type="button" onClick={reset}>Replace file</button>{!hasResults && <button className="primary-button" type="button" onClick={verify} disabled={verifying}>{verifying ? "Verifying…" : "Verify addresses"}</button>}</div>
             </header>
 
             <div className="stat-grid">
@@ -243,14 +313,26 @@ export default function CleanerApp() {
 
             {(verifying || hasResults) && <div className="progress-block"><div className="progress-copy"><span>{verifying ? `Verifying batch ${Math.ceil(completed / BATCH_SIZE) + 1} of ${Math.ceil(rows.length / BATCH_SIZE)}` : "Verification complete"}</span><b>{progress}%</b></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div>{verifying && <button onClick={cancel} type="button">Cancel</button>}</div>}
 
-            <div className="table-wrap">
+            <div className="table-wrap" tabIndex={0} aria-label="Verification results table">
               <table><thead><tr><th>Name</th><th>Title</th><th>Organization</th><th>Email</th><th>Status</th><th>Reason</th></tr></thead>
                 <tbody>{visibleRows.map((row) => <tr key={row.id}><td>{row.name || "—"}</td><td>{row.title || "—"}</td><td>{row.organization || "—"}</td><td className="email-cell">{row.email}</td><td><span className={`status-tag ${row.verification?.status || "pending"}`}>{statusLabel(row.verification?.status)}</span></td><td className="reason-cell">{row.verification?.reason || "Waiting to verify"}</td></tr>)}</tbody>
               </table>
-              {rows.length > 100 && <p className="table-note">Showing the first 100 matching rows. Your complete list remains available for export.</p>}
+              {filteredRows.length > 20 && <p className="table-note">Showing {visibleRows.length.toLocaleString()} matching rows (scroll to view all). Your complete list of {rows.length.toLocaleString()} rows remains available for export.</p>}
             </div>
 
-            {hasResults && !verifying && <footer className="export-bar"><div><strong>Build your clean list</strong><span>Valid addresses are included automatically.</span></div><label><input type="checkbox" checked={includeRisky} onChange={(e) => setIncludeRisky(e.target.checked)} /> Include risky</label><label><input type="checkbox" checked={includeUnknown} onChange={(e) => setIncludeUnknown(e.target.checked)} /> Include unknown</label><button className="download-button" type="button" onClick={download} disabled={!exportCount}>Download {exportCount.toLocaleString()} clean rows ↓</button></footer>}
+            {hasResults && !verifying && (
+              <footer className="export-bar">
+                <div>
+                  <strong>Build your clean list</strong>
+                  <span>Valid addresses are included automatically.</span>
+                </div>
+                <label><input type="checkbox" checked={includeRisky} onChange={(e) => setIncludeRisky(e.target.checked)} /> Include risky</label>
+                <label><input type="checkbox" checked={includeUnknown} onChange={(e) => setIncludeUnknown(e.target.checked)} /> Include unknown</label>
+                <button className="download-button" type="button" onClick={downloadClean} disabled={!exportCount}>
+                  Download {exportCount.toLocaleString()} Clean Rows ↓
+                </button>
+              </footer>
+            )}
           </section>
         )}
 
@@ -268,10 +350,10 @@ export default function CleanerApp() {
       <section className="status-section" id="status-guide">
         <div className="status-intro"><span className="section-kicker">Honest results</span><h2>Clear signals.<br />No false certainty.</h2><p>Every address lands in a practical group, with the reason shown beside it. Unknown never means automatically valid.</p></div>
         <div className="status-guide-grid">
-          <article className="guide-valid"><span className="guide-dot" /><div><h3>Valid</h3><p>The mailbox accepted the verification request. A strong candidate for your clean export.</p></div></article>
-          <article className="guide-invalid"><span className="guide-dot" /><div><h3>Invalid</h3><p>The syntax, domain, or mailbox failed a decisive check. Remove it from the send.</p></div></article>
-          <article className="guide-risky"><span className="guide-dot" /><div><h3>Risky</h3><p>It may receive mail, but role-based or disposable patterns can lower list quality.</p></div></article>
-          <article className="guide-unknown"><span className="guide-dot" /><div><h3>Unknown</h3><p>The provider blocked the check or timed out. This does not confirm the mailbox exists.</p></div></article>
+          <article className="guide-valid"><span /><div><h3 className="valid">Valid</h3><p>The mailbox accepted the verification request. A strong candidate for your clean export.</p></div></article>
+          <article className="guide-invalid"><span /><div><h3 className="invalid">Invalid</h3><p>The syntax, domain, or mailbox failed a decisive check. Remove it from the send.</p></div></article>
+          <article className="guide-risky"><span /><div><h3 className="risky">Risky</h3><p>It may receive mail, but role-based or disposable patterns can lower list quality.</p></div></article>
+          <article className="guide-unknown"><span /><div><h3 className="unknown">Unknown</h3><p>The provider blocked the check or timed out. This does not confirm the mailbox exists.</p></div></article>
         </div>
       </section>
 

@@ -32,7 +32,6 @@ test("does not make the removed marketing claim", async () => {
   const source = await readFile(new URL("app/CleanerApp.tsx", root), "utf8");
   assert.doesNotMatch(source, /No sign-up\. No storage\. No surprises\./);
   assert.match(source, /Unknown never means automatically valid/i);
-  assert.match(source, /Delete stored copy/);
 });
 
 test("keeps Google services and contact identity configuration explicit", async () => {

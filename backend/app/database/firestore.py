@@ -145,6 +145,9 @@ class ContactMessageStore:
             }
         )
 
+    def delete_message(self, message_id: str) -> None:
+        upload_metadata._get_client().collection("contact_messages").document(message_id).delete()
+
     def list_all_messages(self) -> list[dict[str, Any]]:
         docs = upload_metadata._get_client().collection("contact_messages").stream()
         results: list[dict[str, Any]] = []

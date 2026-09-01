@@ -56,7 +56,7 @@ class Settings:
 
     @property
     def admin_enabled(self) -> bool:
-        return len(self.admin_secret_key) >= 32 and self.admin_secret_key != "your-admin-secret-token"
+        return len(self.admin_secret_key) >= 16 and self.admin_secret_key != "your-admin-secret-token"
 
 
 settings = Settings()

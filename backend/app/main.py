@@ -15,11 +15,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(settings.cors_origins),
-    allow_credentials=False,
-    allow_methods=["POST", "GET", "DELETE"],
-    allow_headers=["Content-Type", "X-Delete-Token", "X-Admin-Token"],
-    expose_headers=["Content-Disposition"],
+    allow_origins=list(settings.cors_origins) if settings.cors_origins else ["*"],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
 )
 app.include_router(verification_router)
 app.include_router(uploads_router)

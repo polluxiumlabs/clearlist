@@ -4,6 +4,7 @@ export type ContactRow = {
   title: string;
   organization: string;
   email: string;
+  raw?: Record<string, any>;
   verification?: VerificationResult;
 };
 
@@ -18,6 +19,10 @@ export type VerificationResult = {
   role: boolean;
   smtp: "accepted" | "rejected" | "unknown";
   catch_all: boolean | null;
+  spf?: boolean | null;
+  dmarc?: boolean | null;
+  provider?: string | null;
+  suggested_email?: string | null;
   status: VerificationStatus;
   reason: string;
 };
@@ -27,4 +32,5 @@ export type ParsedPayload = {
   duplicates: number;
   emptyEmails: number;
   sourceRows: number;
+  headers?: string[];
 };
