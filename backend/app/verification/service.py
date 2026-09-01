@@ -146,7 +146,7 @@ class VerificationService:
             elif smtp == "accepted":
                 status, reason = "valid", "Mailbox accepted"
             else:
-                status, reason = "valid", "Domain & MX records verified"
+                status, reason = "unknown", "MX & Domain valid; mailbox probe unavailable"
 
             return VerificationResult(
                 email=normalized,
