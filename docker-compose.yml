@@ -1,0 +1,40 @@
+services:
+  api:
+    image: ${BACKEND_IMAGE:-ghcr.io/polluxiumlabs/clearlist-backend:latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "8000"
+    networks:
+      - clearlist_net
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - API_DOMAIN=${API_DOMAIN:-localhost}
+      - ACME_EMAIL=${ACME_EMAIL:-admin@example.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - clearlist_net
+    depends_on:
+      - api
+
+networks:
+  clearlist_net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

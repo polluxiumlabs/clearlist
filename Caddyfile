@@ -1,0 +1,17 @@
+{
+    # Optional notification email for Let's Encrypt certificates
+    email {$ACME_EMAIL:admin@example.com}
+}
+
+{$API_DOMAIN:localhost} {
+    # Reverse proxy backend API endpoints to the FastAPI container
+    reverse_proxy api:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Enable gzip & zstd compression
+    encode gzip zstd
+}
