@@ -65,4 +65,8 @@ jobs:
         working-directory: backend
         env:
           PYTHONPATH: .
+          ADMIN_SECRET_KEY: ci-test-admin-secret-key-123456789
+          UPLOAD_TOKEN_SECRET: ci-test-upload-secret-123456789
+          CORS_ORIGINS: http://localhost:3000
         run: python -m pytest -v -p no:cacheprovider
+
