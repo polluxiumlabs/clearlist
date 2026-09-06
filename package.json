@@ -13,6 +13,7 @@
     "build:vercel": "next build",
     "start:vercel": "next start",
     "test": "node --test tests/rendered-html.test.mjs",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern public"
   },
   "dependencies": {

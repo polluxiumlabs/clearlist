@@ -197,6 +197,7 @@ def test_admin_verify_success() -> None:
 def test_admin_download_original_and_clean(monkeypatch) -> None:
     from app.api import admin
     from app.config import settings
+    from app.verification.result import VerificationResult
 
     class FakeStorage:
         enabled = True
@@ -207,10 +208,25 @@ def test_admin_download_original_and_clean(monkeypatch) -> None:
         def get_clean_csv(self, upload_id: str) -> bytes | None:
             return None
 
-        def put_clean_csv(self, upload_id: str, body: bytes) -> None:
-            pass
+    class FakeMetadata:
+        enabled = False
+
+    class FakeVerificationService:
+        async def verify(self, email: str) -> VerificationResult:
+            return VerificationResult(
+                email=email,
+                syntax=True,
+                domain=True,
+                mx=True,
+                disposable=False,
+                role=False,
+                status="valid",
+                reason="Delivers to valid MX host",
+            )
 
     monkeypatch.setattr(admin, "b2_storage", FakeStorage())
+    monkeypatch.setattr(admin, "upload_metadata", FakeMetadata())
+    monkeypatch.setattr(admin, "verification_service", FakeVerificationService())
 
     # Download original
     orig_resp = client.get("/api/admin/uploads/test1234/download-original", headers={"X-Admin-Token": settings.admin_secret_key})
@@ -224,8 +240,24 @@ def test_admin_download_original_and_clean(monkeypatch) -> None:
     assert b"Reason" in clean_resp.content
 
 
-def test_admin_batch_delete() -> None:
+def test_admin_batch_delete(monkeypatch) -> None:
+    from app.api import admin
     from app.config import settings
+
+    class FakeStorage:
+        enabled = True
+
+        def delete_all_csv_versions(self, upload_id: str) -> None:
+            pass
+
+    class FakeMetadata:
+        enabled = True
+
+        def delete_record(self, upload_id: str) -> None:
+            pass
+
+    monkeypatch.setattr(admin, "b2_storage", FakeStorage())
+    monkeypatch.setattr(admin, "upload_metadata", FakeMetadata())
 
     resp = client.post(
         "/api/admin/uploads/batch-delete",
@@ -236,7 +268,15 @@ def test_admin_batch_delete() -> None:
     assert resp.json()["deleted_count"] == 2
 
 
-def test_typo_detection() -> None:
+def test_typo_detection(monkeypatch) -> None:
+    from app.api.verify import verification_service
+    from app.verification.domain import DomainFacts
+
+    async def fake_domain_facts(domain: str) -> DomainFacts:
+        return DomainFacts(exists=False, has_mx=False)
+
+    monkeypatch.setattr(verification_service, "_domain_facts", fake_domain_facts)
+
     response = client.post("/api/verify-batch", json={"emails": ["john@gmai.com"]})
     assert response.status_code == 200
     result = response.json()["results"][0]

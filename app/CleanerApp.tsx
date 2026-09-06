@@ -28,7 +28,7 @@ export default function CleanerApp() {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const [rows, setRows] = useState<ContactRow[]>([]);
-  const [rawFile, setRawFile] = useState<File | null>(null);
+  const [_rawFile, setRawFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState("");
   const [parseInfo, setParseInfo] = useState<Omit<ParsedPayload, "rows"> | null>(null);
   const [error, setError] = useState("");
@@ -313,7 +313,7 @@ export default function CleanerApp() {
 
             {(verifying || hasResults) && <div className="progress-block"><div className="progress-copy"><span>{verifying ? `Verifying batch ${Math.ceil(completed / BATCH_SIZE) + 1} of ${Math.ceil(rows.length / BATCH_SIZE)}` : "Verification complete"}</span><b>{progress}%</b></div><div className="progress-track"><span style={{ width: `${progress}%` }} /></div>{verifying && <button onClick={cancel} type="button">Cancel</button>}</div>}
 
-            <div className="table-wrap" tabIndex={0} aria-label="Verification results table">
+            <div className="table-wrap" role="region" tabIndex={0} aria-label="Verification results table">
               <table><thead><tr><th>Name</th><th>Title</th><th>Organization</th><th>Email</th><th>Status</th><th>Reason</th></tr></thead>
                 <tbody>{visibleRows.map((row) => <tr key={row.id}><td>{row.name || "—"}</td><td>{row.title || "—"}</td><td>{row.organization || "—"}</td><td className="email-cell">{row.email}</td><td><span className={`status-tag ${row.verification?.status || "pending"}`}>{statusLabel(row.verification?.status)}</span></td><td className="reason-cell">{row.verification?.reason || "Waiting to verify"}</td></tr>)}</tbody>
               </table>
